@@ -1,0 +1,151 @@
+#pragma kernel TraceRays // 0
+
+#include "MathResourcesRT.hlsl"
+
+static const int ThreadsNum = 16;
+
+static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
+
+// Constants
+const int SpheresNum;
+
+// Ray setup settings
+const int MaxStepCount;
+const int RaysPerPixel;
+const float DefocusStrength;
+
+// View settings
+const int2 Resolution;
+const float viewSpaceWidth;
+const float viewSpaceHeight;
+const float focalPlaneFactor;
+
+// Camera orientation
+const float3 WorldSpaceCameraPos;
+const float3 CameraRotation;
+
+// Per frame
+const int FrameRand; // "random" value from 0 to 999999, gets reset each frame
+const int FrameCount; // Each frame: FrameCount++
+
+struct Ray
+{
+    float3 origin;
+    float3 pos;
+    float3 dir;
+};
+struct OpaqueSphere
+{
+    float3 position;
+    float radius;
+    int materialFlag;
+};
+struct OpaqueMaterial
+{
+    float3 color;
+    float3 specularColor;
+    float brightness;
+    float smoothness;
+};
+struct StepInfo
+{
+    bool didHit;
+    float dst;
+    float3 hitPoint;
+    float3 normal;
+};
+struct TraceInfo
+{
+    float3 rayColor;
+    float3 incomingLight;
+};
+
+RWStructuredBuffer<OpaqueMaterial> OpaqueMaterials;
+RWStructuredBuffer<OpaqueSphere> OpaqueSpheres;
+
+RWTexture2D<float4> Result;
+
+float3 ApplyCameraTransform (float3 point_)
+{
+    float3x3 rotationX = float3x3(
+        1, 0, 0,
+        0, cos(CameraRotation.x), -sin(CameraRotation.x),
+        0, sin(CameraRotation.x), cos(CameraRotation.x)
+    );
+    float3x3 rotationY = float3x3(
+        cos(CameraRotation.y), 0, sin(CameraRotation.y),
+        0, 1, 0,
+        -sin(CameraRotation.y), 0, cos(CameraRotation.y)
+    );
+    float3x3 rotationZ = float3x3(
+        cos(CameraRotation.z), -sin(CameraRotation.z), 0,
+        sin(CameraRotation.z), cos(CameraRotation.z), 0,
+        0, 0, 1
+    );
+
+    // Apply rotations in the order of Z, X, Y
+    // Applying the rotation matrices in the order of Z, Y, X, results in issues when rotating around the x axis (don't know why)
+    point_ = mul(rotationZ, point_);
+    point_ = mul(rotationX, point_);
+    point_ = mul(rotationY, point_);
+
+    return point_;
+}
+
+TraceInfo Trace (Ray ray, inout int rngState)
+{
+    TraceInfo traceInfo;
+    traceInfo.rayColor = float3(1, 1, 1); // Default is (1, 1, 1)
+    traceInfo.incomingLight = float3(0, 0, 0); // Default incoming light is (0, 0, 0)
+
+    // Step through scene
+    for (int stepCount = 0; stepCount < MaxStepCount; stepCount++)
+    {
+        traceInfo.incomingLight = abs(randPointOnUnitSphere(rngState));
+    }
+
+    return traceInfo;
+}
+
+[numthreads(ThreadsNum,ThreadsNum,1)]
+void TraceRays (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)Resolution.x || id.y >= (uint)Resolution.y) { return; }
+    int rngState = id.y * Resolution.x + id.x + FrameRand;
+
+    // Calculate focal plane world position for the given pixel
+    float focalPosX = (float(id.x) / Resolution.x - 0.5) * 2.0 * viewSpaceWidth;
+    float focalPosY = (float(id.y) / Resolution.y - 0.5) * 2.0 * viewSpaceHeight;
+    float3 focalPos = float3(focalPosX, focalPosY, 1) * focalPlaneFactor;
+    float3 worldFocalPos = ApplyCameraTransform(focalPos) + WorldSpaceCameraPos;
+
+    // Trace ray(s) through the scene
+    TraceInfo combinedTraceInfo;
+    for (int i = 0; i < RaysPerPixel; i++)
+    {
+        // Initial ray setup
+        float3 jitter = ApplyCameraTransform(float3(randPointInCircle(rngState) * DefocusStrength, 0));
+        Ray ray;
+        ray.origin = WorldSpaceCameraPos + jitter * focalPlaneFactor;
+        ray.pos = ray.origin;
+        ray.dir = normalize(worldFocalPos - ray.origin);
+
+        // Trace ray
+        TraceInfo traceInfo = Trace(ray, rngState);
+
+        // Record traceInfo
+        combinedTraceInfo.incomingLight += traceInfo.incomingLight;
+    }
+    combinedTraceInfo.incomingLight /= float(RaysPerPixel);
+
+    // Combine prev frame with current frame. Weight the contributions to result in an average over all frames.
+    float3 col = combinedTraceInfo.incomingLight;
+    float3 colPrev = float3(Result[id.xy].x, Result[id.xy].y, Result[id.xy].z);
+
+    float weight = 1.0 / (FrameCount + 1);
+
+    float3 accumulatedCol = saturate(colPrev * (1 - weight) + col * weight);
+
+    // Result[id.xy] = float4(accumulatedCol.x, accumulatedCol.y, accumulatedCol.z, 0);
+    Result[id.xy] = float4(col.x, col.y, col.z, 0);
+}

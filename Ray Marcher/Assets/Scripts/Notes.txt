@@ -1,0 +1,4 @@
+-- Optimisations --
+
+Occlusion culling - Exclude spheres not in view, from being processed by the RT shader
+Spatial partitioning - Traverse through the scene along a grid, only checking collisions with spheres that are "near" each cell (preprocessing step)
