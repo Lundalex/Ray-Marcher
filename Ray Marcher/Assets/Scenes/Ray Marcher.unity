@@ -233,8 +233,10 @@ MonoBehaviour:
   Resolution:
     x: 1920
     y: 1080
-  MaxStepCount: 50
-  RaysPerPixel: 10
+  MaxStepCount: 100
+  RaysPerPixel: 5
+  HitThreshold: 0.005
+  ScatterProbability: 0.7
   DefocusStrength: 0
   focalPlaneFactor: 16.7
   FrameCount: 0
@@ -279,7 +281,7 @@ MonoBehaviour:
   - x: 1
     y: 1
     z: 1
-    w: 9
+    w: 7
   MatTypesInput2:
   - x: 1
     y: 0

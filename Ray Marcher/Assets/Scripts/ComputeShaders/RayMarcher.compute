@@ -6,12 +6,19 @@ static const int ThreadsNum = 16;
 
 static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
 
-// Constants
-const int SpheresNum;
+// Num constants
+const int NumTriObjects;
+const int NumTris;
+const int NumSpheres;
+const int NumMaterials;
 
 // Ray setup settings
 const int MaxStepCount;
 const int RaysPerPixel;
+
+const float HitThreshold;
+
+const float ScatterProbability;
 const float DefocusStrength;
 
 // View settings
@@ -28,31 +35,20 @@ const float3 CameraRotation;
 const int FrameRand; // "random" value from 0 to 999999, gets reset each frame
 const int FrameCount; // Each frame: FrameCount++
 
+// Shader specific structs
 struct Ray
 {
     float3 origin;
     float3 pos;
     float3 dir;
 };
-struct OpaqueSphere
-{
-    float3 position;
-    float radius;
-    int materialFlag;
-};
-struct OpaqueMaterial
-{
-    float3 color;
-    float3 specularColor;
-    float brightness;
-    float smoothness;
-};
 struct StepInfo
 {
-    bool didHit;
-    float dst;
-    float3 hitPoint;
+    float nearDst;
+
+    // Hit only:
     float3 normal;
+    int materialKey;
 };
 struct TraceInfo
 {
@@ -60,12 +56,47 @@ struct TraceInfo
     float3 incomingLight;
 };
 
-RWStructuredBuffer<OpaqueMaterial> OpaqueMaterials;
-RWStructuredBuffer<OpaqueSphere> OpaqueSpheres;
+// Shader input structs
+struct TriObject
+{
+    float3 pos;
+    float containedRadius;
+    int triStart;
+    int triEnd;
+};
+struct Tri // Triangle
+{
+    float3 vA;
+    float3 vB;
+    float3 vC;
+    float3 normal;
+    int materialKey;
+    int parentKey;
+};
+struct Sphere
+{
+    float3 pos;
+    float radius;
+    int materialKey;
+};
+struct Material2
+{
+    float3 color;
+    float3 specularColor;
+    float brightness;
+    float smoothness;
+};
 
-RWTexture2D<float4> Result;
+// Shader input buffers
+RWStructuredBuffer<Material2> Materials;
+RWStructuredBuffer<TriObject> TriObjects;
+RWStructuredBuffer<Tri> Tris;
+RWStructuredBuffer<Sphere> Spheres;
 
-float3 ApplyCameraTransform (float3 point_)
+// Shader output buffer
+RWTexture2D<float4> Result; // abc: rgb, d: opacity
+
+float3 ApplyCameraTransform (float3 point2)
 {
     float3x3 rotationX = float3x3(
         1, 0, 0,
@@ -85,11 +116,85 @@ float3 ApplyCameraTransform (float3 point_)
 
     // Apply rotations in the order of Z, X, Y
     // Applying the rotation matrices in the order of Z, Y, X, results in issues when rotating around the x axis (don't know why)
-    point_ = mul(rotationZ, point_);
-    point_ = mul(rotationX, point_);
-    point_ = mul(rotationY, point_);
+    point2 = mul(rotationZ, point2);
+    point2 = mul(rotationX, point2);
+    point2 = mul(rotationY, point2);
 
-    return point_;
+    return point2;
+}
+
+float SphereSgnDst (float3 point2, Sphere sphere)
+{
+    float3 localCentrePos = sphere.pos - point2;
+    float sgnDst = length(localCentrePos) - sphere.radius;
+
+    return sgnDst;
+}
+
+float TriDstSqr( float3 p, float3 a, float3 b, float3 c )
+{
+  float3 ba = b - a; float3 pa = p - a;
+  float3 cb = c - b; float3 pb = p - b;
+  float3 ac = a - c; float3 pc = p - c;
+  float3 nor = cross( ba, ac );
+
+  return (sign(dot(cross(ba,nor),pa)) +
+         sign(dot(cross(cb,nor),pb)) +
+         sign(dot(cross(ac,nor),pc))<2.0)
+         ?
+         min( min(
+         dot2(ba*clamp(dot(ba,pa)/dot2(ba),0.0,1.0)-pa),
+         dot2(cb*clamp(dot(cb,pb)/dot2(cb),0.0,1.0)-pb) ),
+         dot2(ac*clamp(dot(ac,pc)/dot2(ac),0.0,1.0)-pc) )
+         :
+         dot(nor,pa)*dot(nor,pa)/dot2(nor);
+}
+
+StepInfo Step (Ray ray, inout int rngState)
+{
+    float nearDstSqr = FLT_MAX;
+    int materialKey = -1;
+    float3 normal = float3(0.0, 0.0, 0.0);
+
+    // Tris
+    // for (int triCount = 0; triCount < NumTris; triCount++)
+    // {
+    //     Tri tri = Tris[triCount];
+
+    //     float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
+    //     float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
+
+    //     if (dstSqr < nearDstSqr)
+    //     {
+    //         nearDstSqr = dstSqr;
+    //         materialKey = tri.materialKey;
+    //         normal = tri.normal;
+    //     }
+    // }
+
+    // Spheres
+    for (int sphereCount = 0; sphereCount < NumSpheres; sphereCount++)
+    {
+        Sphere sphere = Spheres[sphereCount];
+
+        float sgnDstSqr = sqr(SphereSgnDst(ray.pos, sphere));
+
+        if (sgnDstSqr < nearDstSqr)
+        {
+            nearDstSqr = sgnDstSqr;
+            materialKey = sphere.materialKey;
+            normal = normalize(ray.pos - sphere.pos);
+        }
+    }
+
+    float nearDst = sqrt(nearDstSqr);
+
+    StepInfo stepInfo;
+    stepInfo.nearDst = nearDst;
+    stepInfo.normal = normal;
+    stepInfo.materialKey = materialKey;
+
+    return stepInfo;
 }
 
 TraceInfo Trace (Ray ray, inout int rngState)
@@ -97,11 +202,48 @@ TraceInfo Trace (Ray ray, inout int rngState)
     TraceInfo traceInfo;
     traceInfo.rayColor = float3(1, 1, 1); // Default is (1, 1, 1)
     traceInfo.incomingLight = float3(0, 0, 0); // Default incoming light is (0, 0, 0)
+    // traceInfo.incomingLight = abs(randPointOnUnitSphere(rngState));
 
     // Step through scene
     for (int stepCount = 0; stepCount < MaxStepCount; stepCount++)
     {
-        traceInfo.incomingLight = abs(randPointOnUnitSphere(rngState));
+        StepInfo stepInfo = Step(ray, rngState);
+
+        // March by nearest dst length
+        ray.pos += stepInfo.nearDst * ray.dir;
+
+        // Hit?
+        if (stepInfo.nearDst < HitThreshold)
+        {
+            Material2 material = Materials[stepInfo.materialKey];
+            
+            ray.pos -= (0.02 + stepInfo.nearDst) * ray.dir; // Revert last ray march step + epsilon offset
+
+            // Calculate new ray origin
+            ray.origin = ray.pos;
+
+            // Calculate new ray direction
+            // isSpecularBounce == False -> ray.dir = scatterDir
+            // isSpecularBounce == True -> ray.dir = norm(lerp(scatterDir, specularDir, material.smoothness))
+            bool isSpecularBounce = ScatterProbability < randNormalized(rngState);
+            // Cosine weighted randPointOnUnitSphere. This removes the need for any "light spread" calculations
+            float3 scatterDir = normalize(stepInfo.normal + randPointOnUnitSphere(rngState));
+            float3 specularDir = reflect(ray.dir, stepInfo.normal);
+            ray.dir = normalize(lerp(scatterDir, specularDir, material.smoothness * isSpecularBounce));
+
+            // Validate ray direction
+            if (dot(stepInfo.normal, ray.dir) < 0)
+            {
+                ray.dir = -ray.dir;
+            }
+
+            // Calculate new traceInfo values
+            float3 emittedLight = material.color * material.brightness;
+            traceInfo.incomingLight += emittedLight * traceInfo.rayColor;
+            traceInfo.rayColor *= lerp(material.color, material.specularColor, isSpecularBounce);
+        }
+
+        if (stepInfo.nearDst > 20) { return traceInfo; } // Probably outside scene
     }
 
     return traceInfo;
@@ -146,6 +288,6 @@ void TraceRays (uint3 id : SV_DispatchThreadID)
 
     float3 accumulatedCol = saturate(colPrev * (1 - weight) + col * weight);
 
-    // Result[id.xy] = float4(accumulatedCol.x, accumulatedCol.y, accumulatedCol.z, 0);
-    Result[id.xy] = float4(col.x, col.y, col.z, 0);
+    Result[id.xy] = float4(accumulatedCol.x, accumulatedCol.y, accumulatedCol.z, 0);
+    // Result[id.xy] = float4(col.x, col.y, col.z, 0);
 }

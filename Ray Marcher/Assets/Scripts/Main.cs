@@ -14,7 +14,9 @@ public class Main : MonoBehaviour
     [Header("RM settings")]
     public int MaxStepCount;
     public int RaysPerPixel;
-    public int DefocusStrength;
+    public float HitThreshold;
+    [Range(0.0f, 1.0f)] public float ScatterProbability;
+    [Range(0.0f, 2.0f)] public float DefocusStrength;
     public float focalPlaneFactor; // focalPlaneFactor must be positive
     public int FrameCount;
 
@@ -30,10 +32,18 @@ public class Main : MonoBehaviour
     // Private variables
     private RenderTexture renderTexture;
     private int RayTracerThreadSize = 16; // /32
-    private OpaqueSphere[] OpaqueSpheres;
-    private OpaqueMaterial[] OpaqueMaterials;
-    public ComputeBuffer OpaqueSphereBuffer;
-    public ComputeBuffer OpaqueMaterialsBuffer;
+    private int Stride_TriObject = sizeof(float) * 4 + sizeof(int) * 2;
+    private int Stride_Tri = sizeof(float) * 12 + sizeof(int) * 2;
+    private int Stride_Sphere = sizeof(float) * 4 + sizeof(int) * 1;
+    private int Stride_Material = sizeof(float) * 8 + sizeof(int) * 0;
+    private TriObject[] TriObjects;
+    private Tri[] Tris;
+    private Sphere[] Spheres;
+    private Material2[] Materials;
+    public ComputeBuffer B_TriObjects;
+    public ComputeBuffer B_Tris;
+    public ComputeBuffer B_Spheres;
+    public ComputeBuffer B_Materials;
 
     private bool ProgramStarted = false;
     private Vector3 lastCameraPosition;
@@ -45,8 +55,10 @@ public class Main : MonoBehaviour
         
         lastCameraPosition = transform.position;
 
-        OpaqueSphereBuffer = new ComputeBuffer(SpheresInput.Length, sizeof(float) * 4 + sizeof(int) * 1);
-        OpaqueMaterialsBuffer = new ComputeBuffer(MatTypesInput1.Length, sizeof(float) * 8 + sizeof(int) * 0);
+        B_TriObjects = new ComputeBuffer(SpheresInput.Length, Stride_TriObject);
+        B_Tris = new ComputeBuffer(MatTypesInput1.Length, Stride_Tri);
+        B_Spheres = new ComputeBuffer(SpheresInput.Length, Stride_Sphere);
+        B_Materials = new ComputeBuffer(MatTypesInput1.Length, Stride_Material);
 
         UpdateSetData();
 
@@ -106,7 +118,10 @@ public class Main : MonoBehaviour
 
         shaderHelper.SetRMShaderBuffers(rmShader);
 
-        rmShader.SetInt("SpheresNum", OpaqueSpheres.Length);
+        rmShader.SetInt("NumTriObjects", TriObjects.Length);
+        rmShader.SetInt("NumTris", Tris.Length);
+        rmShader.SetInt("NumSpheres", Spheres.Length);
+        rmShader.SetInt("NumMaterials", Materials.Length);
 
         int[] resolutionArray = new int[] { Resolution.x, Resolution.y };
         rmShader.SetInts("Resolution", resolutionArray);
@@ -114,7 +129,11 @@ public class Main : MonoBehaviour
         // Ray setup settings
         rmShader.SetInt("MaxStepCount", MaxStepCount);
         rmShader.SetInt("RaysPerPixel", RaysPerPixel);
-        rmShader.SetInt("DefocusStrength", DefocusStrength);
+
+        rmShader.SetFloat("HitThreshold", HitThreshold);
+
+        rmShader.SetFloat("ScatterProbability", ScatterProbability);
+        rmShader.SetFloat("DefocusStrength", DefocusStrength);
 
         // Screen settings
         float aspectRatio = Resolution.x / Resolution.y;
@@ -129,24 +148,54 @@ public class Main : MonoBehaviour
 
     void UpdateSetData()
     {
-        // Set spheres data
-        OpaqueSpheres = new OpaqueSphere[SpheresInput.Length];
-        for (int i = 0; i < OpaqueSpheres.Length; i++)
+        // Set TriObjects data
+        TriObjects = new TriObject[1];
+        for (int i = 0; i < TriObjects.Length; i++)
         {
-            OpaqueSpheres[i] = new OpaqueSphere
+            TriObjects[i] = new TriObject
             {
-                position = new float3(SpheresInput[i].x, SpheresInput[i].y, SpheresInput[i].z),
-                radius = SpheresInput[i].w,
-                materialFlag = i == 0 ? 1 : 0
+                pos = new float3(2.0f, 5.0f, 0.0f),
+                containedRadius = 0.0f,
+                triStart = 0,
+                triEnd = 0,
             };
         }
-        OpaqueSphereBuffer.SetData(OpaqueSpheres);
+        B_TriObjects.SetData(TriObjects);
 
-        // Set Material2 types data
-        OpaqueMaterials = new OpaqueMaterial[MatTypesInput1.Length];
-        for (int i = 0; i < OpaqueMaterials.Length; i++)
+        // Set Tris data
+        Tris = new Tri[1];
+        for (int i = 0; i < Tris.Length; i++)
         {
-            OpaqueMaterials[i] = new OpaqueMaterial
+            Tris[i] = new Tri
+            {
+                vA = new float3(0.0f, 0.0f, 0.0f),
+                vB = new float3(1.0f, 0.0f, 2.0f),
+                vC = new float3(0.0f, 1.0f, 1.0f),
+                normal = new float3(0.0f, 0.0f, 0.0f),
+                materialKey = 0,
+                parentKey = 0,
+            };
+        }
+        B_Tris.SetData(Tris);
+
+        // Set Spheres data
+        Spheres = new Sphere[SpheresInput.Length];
+        for (int i = 0; i < Spheres.Length; i++)
+        {
+            Spheres[i] = new Sphere
+            {
+                pos = new float3(SpheresInput[i].x, SpheresInput[i].y, SpheresInput[i].z),
+                radius = SpheresInput[i].w,
+                materialKey = i == 0 ? 1 : 0,
+            };
+        }
+        B_Spheres.SetData(Spheres);
+
+        // Set Materials data
+        Materials = new Material2[MatTypesInput1.Length];
+        for (int i = 0; i < Materials.Length; i++)
+        {
+            Materials[i] = new Material2
             {
                 color = new float3(MatTypesInput1[i].x, MatTypesInput1[i].y, MatTypesInput1[i].z),
                 specularColor = new float3(1, 1, 1), // Specular color is currently set to white for all Material2 types
@@ -154,7 +203,7 @@ public class Main : MonoBehaviour
                 smoothness = MatTypesInput2[i].x
             };
         }
-        OpaqueMaterialsBuffer.SetData(OpaqueMaterials);
+        B_Materials.SetData(Materials);
     }
 
     void RunRenderShader()
@@ -182,7 +231,9 @@ public class Main : MonoBehaviour
 
     void OnDestroy()
     {
-        OpaqueSphereBuffer?.Release();
-        OpaqueMaterialsBuffer?.Release();
+        B_TriObjects?.Release();
+        B_Tris?.Release();
+        B_Spheres?.Release();
+        B_Materials?.Release();
     }
 }

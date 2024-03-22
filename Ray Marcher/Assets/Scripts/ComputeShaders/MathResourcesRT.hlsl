@@ -5,6 +5,15 @@ float sqr(float a)
 	return a * a;
 }
 
+float dot2(float3 a) // float3 version
+{
+    return dot(a, a);
+}
+float dot2(float2 a) // float2 version
+{
+    return dot(a, a);
+}
+
 uint NextRandom(inout uint state)
 {
     state = state * 747796405 + 2891336453;
@@ -25,6 +34,7 @@ float randValueNormalDistribution(inout uint state)
     return rho * cos(theta);
 }
 
+// Expensive!
 float3 randPointOnUnitSphere(inout uint state)
 {
     float x = randValueNormalDistribution(state);

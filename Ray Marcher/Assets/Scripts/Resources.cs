@@ -6,13 +6,30 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace Resources
 {
-    public struct OpaqueSphere
+    // Shader input structs
+    public struct TriObject
     {
-        public float3 position;
-        public float radius;
-        public int materialFlag;
+        public float3 pos;
+        public float containedRadius;
+        public int triStart;
+        public int triEnd;
     };
-    struct OpaqueMaterial
+    public struct Tri // Triangle
+    {
+        public float3 vA;
+        public float3 vB;
+        public float3 vC;
+        public float3 normal;
+        public int materialKey;
+        public int parentKey;
+    };
+    public struct Sphere
+    {
+        public float3 pos;
+        public float radius;
+        public int materialKey;
+    };
+    public struct Material2
     {
         public float3 color;
         public float3 specularColor;
