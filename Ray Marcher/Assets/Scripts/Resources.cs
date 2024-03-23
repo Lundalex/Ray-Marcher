@@ -10,6 +10,7 @@ namespace Resources
     public struct TriObject
     {
         public float3 pos;
+        public float3 rot;
         public float containedRadius;
         public int triStart;
         public int triEnd;

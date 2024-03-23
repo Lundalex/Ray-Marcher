@@ -1,0 +1,11 @@
+#pragma kernel k1 // 0
+
+#include "MathResourcesRT.hlsl"
+
+static const int ThreadsNum = 512;
+
+[numthreads(ThreadsNum,1,1)]
+void k1 (uint3 id : SV_DispatchThreadID)
+{
+
+}

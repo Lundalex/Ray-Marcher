@@ -3,6 +3,7 @@ using Unity.Mathematics;
 
 // Import utils from Resources.cs
 using Resources;
+using System;
 // Usage: Utils.(functionName)()
 
 public class Main : MonoBehaviour
@@ -21,18 +22,25 @@ public class Main : MonoBehaviour
     public int FrameCount;
 
     [Header("Scene")]
+    public float3 OBJ_Pos;
+    public float3 OBJ_Rot;
     public float4[] SpheresInput; // xyz: pos; w: radii
     public float4[] MatTypesInput1; // xyz: emissionColor; w: emissionStrength
     public float4[] MatTypesInput2; // x: smoothness
 
     [Header("References")]
     public ComputeShader rmShader;
+    public ComputeShader pcShader;
+    public ComputeShader ssShader;
+    [NonSerialized] public RenderTexture renderTexture;
     public ShaderHelper shaderHelper;
+    public Mesh testMesh;
 
     // Private variables
-    private RenderTexture renderTexture;
-    private int RayTracerThreadSize = 16; // /32
-    private int Stride_TriObject = sizeof(float) * 4 + sizeof(int) * 2;
+    private int rmShaderThreadSize = 16; // /32
+    private int pcShaderThreadSize = 512; // / 1024
+    private int ssShaderThreadSize = 512; // / 1024
+    private int Stride_TriObject = sizeof(float) * 7 + sizeof(int) * 2;
     private int Stride_Tri = sizeof(float) * 12 + sizeof(int) * 2;
     private int Stride_Sphere = sizeof(float) * 4 + sizeof(int) * 1;
     private int Stride_Material = sizeof(float) * 8 + sizeof(int) * 0;
@@ -55,19 +63,72 @@ public class Main : MonoBehaviour
         
         lastCameraPosition = transform.position;
 
-        B_TriObjects = new ComputeBuffer(SpheresInput.Length, Stride_TriObject);
-        B_Tris = new ComputeBuffer(MatTypesInput1.Length, Stride_Tri);
         B_Spheres = new ComputeBuffer(SpheresInput.Length, Stride_Sphere);
         B_Materials = new ComputeBuffer(MatTypesInput1.Length, Stride_Material);
 
         UpdateSetData();
+        LoadOBJ();
 
         shaderHelper.SetRMShaderBuffers(rmShader);
+        shaderHelper.SetPCShaderBuffers(pcShader);
 
         UpdatePerFrame();
         UpdateSettings();
 
         ProgramStarted = true;
+    }
+
+    void LoadOBJ()
+    {
+        Vector3[] vertices = testMesh.vertices;
+        int[] triangles = testMesh.triangles;
+        int triNum = triangles.Length / 3;
+
+        // Set Tris data
+        Tris = new Tri[triNum];
+        for (int triCount = 0; triCount < triNum; triCount++)
+        {
+            int triCount3 = 3 * triCount;
+            int indexA = triangles[triCount3];
+            int indexB = triangles[triCount3 + 1];
+            int indexC = triangles[triCount3 + 2];
+
+            Tris[triCount] = new Tri
+            {
+                vA = vertices[indexA],
+                vB = vertices[indexB],
+                vC = vertices[indexC],
+                normal = new float3(0.0f, 0.0f, 0.0f), // init data
+                materialKey = 0,
+                parentKey = 0,
+            };
+        }
+
+        B_Tris = new ComputeBuffer(Tris.Length, Stride_Tri);
+        B_Tris.SetData(Tris);
+
+        SetTriObjectData();
+    }
+
+    void SetTriObjectData()
+    {
+        // Set TriObjects data
+        TriObjects = new TriObject[1];
+        for (int i = 0; i < TriObjects.Length; i++)
+        {
+            TriObjects[i] = new TriObject
+            {
+                pos = OBJ_Pos,
+                rot = OBJ_Rot,
+                containedRadius = 0.0f,
+                triStart = 0,
+                triEnd = Tris.Length - 1,
+            };
+        }
+
+        B_TriObjects ??= new ComputeBuffer(TriObjects.Length, Stride_TriObject);
+
+        B_TriObjects.SetData(TriObjects);
     }
 
     void Update()
@@ -107,6 +168,7 @@ public class Main : MonoBehaviour
     {
         if (ProgramStarted)
         {
+            SetTriObjectData();
             UpdateSettings();
         }
     }
@@ -148,35 +210,6 @@ public class Main : MonoBehaviour
 
     void UpdateSetData()
     {
-        // Set TriObjects data
-        TriObjects = new TriObject[1];
-        for (int i = 0; i < TriObjects.Length; i++)
-        {
-            TriObjects[i] = new TriObject
-            {
-                pos = new float3(2.0f, 5.0f, 0.0f),
-                containedRadius = 0.0f,
-                triStart = 0,
-                triEnd = 0,
-            };
-        }
-        B_TriObjects.SetData(TriObjects);
-
-        // Set Tris data
-        Tris = new Tri[1];
-        for (int i = 0; i < Tris.Length; i++)
-        {
-            Tris[i] = new Tri
-            {
-                vA = new float3(0.0f, 0.0f, 0.0f),
-                vB = new float3(1.0f, 0.0f, 2.0f),
-                vC = new float3(0.0f, 1.0f, 1.0f),
-                normal = new float3(0.0f, 0.0f, 0.0f),
-                materialKey = 0,
-                parentKey = 0,
-            };
-        }
-        B_Tris.SetData(Tris);
 
         // Set Spheres data
         Spheres = new Sphere[SpheresInput.Length];
@@ -206,7 +239,7 @@ public class Main : MonoBehaviour
         B_Materials.SetData(Materials);
     }
 
-    void RunRenderShader()
+    void RunRMShader()
     {
         if (renderTexture == null)
         {
@@ -215,16 +248,32 @@ public class Main : MonoBehaviour
                 enableRandomWrite = true
             };
             renderTexture.Create();
+
+            // Set texture in shader
+            rmShader.SetTexture(0, "Result", renderTexture);
         }
 
-        rmShader.SetTexture(0, "Result", renderTexture);
-        int2 threadGroupNums = Utils.GetThreadGroupsNumsXY(Resolution, RayTracerThreadSize);
+        int2 threadGroupNums = Utils.GetThreadGroupsNumsXY(Resolution, rmShaderThreadSize);
         rmShader.Dispatch(0, threadGroupNums.x, threadGroupNums.y, 1);
+    }
+
+    void RunSSShader()
+    {
+        int threadGroupNum = Utils.GetThreadGroupsNums(1, ssShaderThreadSize);
+        ssShader.Dispatch(0, threadGroupNum, 1, 1);
+    }
+
+    void RunPCShader()
+    {
+        int threadGroupNum = Utils.GetThreadGroupsNums(Tris.Length, pcShaderThreadSize);
+        pcShader.Dispatch(0, threadGroupNum, 1, 1);
     }
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)
     {
-        RunRenderShader();
+        RunPCShader();
+        RunSSShader();
+        RunRMShader();
 
         Graphics.Blit(renderTexture, dest);
     }

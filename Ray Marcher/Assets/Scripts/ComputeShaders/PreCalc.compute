@@ -1,0 +1,50 @@
+#pragma kernel CalcTriNormals // 0
+
+#include "MathResourcesRT.hlsl"
+
+static const int ThreadsNum = 512;
+
+// Shader input structs
+struct Tri // Triangle
+{
+    float3 vA;
+    float3 vB;
+    float3 vC;
+    float3 normal;
+    int materialKey;
+    int parentKey;
+};
+struct TriObject
+{
+    float3 pos;
+    float3 rot;
+    float containedRadius;
+    int triStart;
+    int triEnd;
+};
+
+RWStructuredBuffer<Tri> Tris;
+RWStructuredBuffer<TriObject> TriObjects;
+
+float3 GetPlaneNormal (float3 a, float3 b, float3 c)
+{
+    float3 ab = b - a;
+    float3 ac = c - a;
+
+    return normalize(cross(ab, ac));
+}
+
+// Tri normals only caluclated for 1 direction
+[numthreads(ThreadsNum,1,1)]
+void CalcTriNormals (uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+
+    Tri tri = Tris[i];
+
+    ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
+
+    float3 normal = GetPlaneNormal(tri.vA, tri.vB, tri.vC);
+
+    Tris[i].normal = normal;
+}

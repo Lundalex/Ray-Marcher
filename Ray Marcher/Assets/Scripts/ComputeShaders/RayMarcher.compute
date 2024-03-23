@@ -60,6 +60,7 @@ struct TraceInfo
 struct TriObject
 {
     float3 pos;
+    float3 rot;
     float containedRadius;
     int triStart;
     int triEnd;
@@ -96,31 +97,24 @@ RWStructuredBuffer<Sphere> Spheres;
 // Shader output buffer
 RWTexture2D<float4> Result; // abc: rgb, d: opacity
 
-float3 ApplyCameraTransform (float3 point2)
+float3 ApplyCameraTransform(float3 point2)
 {
-    float3x3 rotationX = float3x3(
-        1, 0, 0,
-        0, cos(CameraRotation.x), -sin(CameraRotation.x),
-        0, sin(CameraRotation.x), cos(CameraRotation.x)
-    );
-    float3x3 rotationY = float3x3(
-        cos(CameraRotation.y), 0, sin(CameraRotation.y),
-        0, 1, 0,
-        -sin(CameraRotation.y), 0, cos(CameraRotation.y)
-    );
-    float3x3 rotationZ = float3x3(
-        cos(CameraRotation.z), -sin(CameraRotation.z), 0,
-        sin(CameraRotation.z), cos(CameraRotation.z), 0,
-        0, 0, 1
+    float cosX = cos(CameraRotation.x);
+    float sinX = sin(CameraRotation.x);
+    float cosY = cos(CameraRotation.y);
+    float sinY = sin(CameraRotation.y);
+    float cosZ = cos(CameraRotation.z);
+    float sinZ = sin(CameraRotation.z);
+
+    // Combine rotation matrices into a single matrix
+    float3x3 rotationMatrix = float3x3(
+        cosY * cosZ,                             cosY * sinZ,                           -sinY,
+        sinX * sinY * cosZ - cosX * sinZ,   sinX * sinY * sinZ + cosX * cosZ,  sinX * cosY,
+        cosX * sinY * cosZ + sinX * sinZ,   cosX * sinY * sinZ - sinX * cosZ,  cosX * cosY
     );
 
-    // Apply rotations in the order of Z, X, Y
-    // Applying the rotation matrices in the order of Z, Y, X, results in issues when rotating around the x axis (don't know why)
-    point2 = mul(rotationZ, point2);
-    point2 = mul(rotationX, point2);
-    point2 = mul(rotationY, point2);
-
-    return point2;
+    // Apply the combined rotation matrix to the point
+    return mul(rotationMatrix, point2);
 }
 
 float SphereSgnDst (float3 point2, Sphere sphere)
@@ -157,20 +151,21 @@ StepInfo Step (Ray ray, inout int rngState)
     float3 normal = float3(0.0, 0.0, 0.0);
 
     // Tris
-    // for (int triCount = 0; triCount < NumTris; triCount++)
-    // {
-    //     Tri tri = Tris[triCount];
+    for (int triCount = 0; triCount < NumTris; triCount++)
+    {
+        Tri tri = Tris[triCount];
+        ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
 
-    //     float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
-    //     float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
+        float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
+        float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
 
-    //     if (dstSqr < nearDstSqr)
-    //     {
-    //         nearDstSqr = dstSqr;
-    //         materialKey = tri.materialKey;
-    //         normal = tri.normal;
-    //     }
-    // }
+        if (dstSqr < nearDstSqr)
+        {
+            nearDstSqr = dstSqr;
+            materialKey = tri.materialKey;
+            normal = tri.normal;
+        }
+    }
 
     // Spheres
     for (int sphereCount = 0; sphereCount < NumSpheres; sphereCount++)

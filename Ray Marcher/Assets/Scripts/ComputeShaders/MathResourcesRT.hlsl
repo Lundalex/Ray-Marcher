@@ -1,5 +1,27 @@
 static const float PI = 3.1415926;
 
+void ApplyTransformTriVertices(float3 rot, inout float3 a, inout float3 b, inout float3 c)
+{
+    float cosX = cos(rot.x);
+    float sinX = sin(rot.x);
+    float cosY = cos(rot.y);
+    float sinY = sin(rot.y);
+    float cosZ = cos(rot.z);
+    float sinZ = sin(rot.z);
+
+    // Combine rotation matrices into a single matrix
+    float3x3 rotationMatrix = float3x3(
+        cosY * cosZ,                             cosY * sinZ,                           -sinY,
+        sinX * sinY * cosZ - cosX * sinZ,   sinX * sinY * sinZ + cosX * cosZ,  sinX * cosY,
+        cosX * sinY * cosZ + sinX * sinZ,   cosX * sinY * sinZ - sinX * cosZ,  cosX * cosY
+    );
+
+    // Apply the combined rotation matrix to each vertex
+    a = mul(rotationMatrix, a);
+    b = mul(rotationMatrix, b);
+    c = mul(rotationMatrix, c);
+}
+
 float sqr(float a)
 {
 	return a * a;

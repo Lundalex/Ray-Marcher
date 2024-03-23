@@ -3,16 +3,22 @@ using UnityEngine;
 public class ShaderHelper : MonoBehaviour
 {
     public Main m;
-    public void SetRMShaderBuffers(ComputeShader rtShader)
+    public void SetRMShaderBuffers(ComputeShader rmShader)
     {
-        rtShader.SetBuffer(0, "TriObjects", m.B_TriObjects);
-        rtShader.SetBuffer(0, "Tris", m.B_Tris);
-        rtShader.SetBuffer(0, "Spheres", m.B_Spheres);
-        rtShader.SetBuffer(0, "Materials", m.B_Materials);
+        rmShader.SetBuffer(0, "TriObjects", m.B_TriObjects);
+        rmShader.SetBuffer(0, "Tris", m.B_Tris);
+        rmShader.SetBuffer(0, "Spheres", m.B_Spheres);
+        rmShader.SetBuffer(0, "Materials", m.B_Materials);
     }
 
-    public void UpdateRMShaderVariables(ComputeShader rtShader)
+    public void SetPCShaderBuffers(ComputeShader pcShader)
     {
+        pcShader.SetBuffer(0, "TriObjects", m.B_TriObjects);
+        pcShader.SetBuffer(0, "Tris", m.B_Tris);
+    }
 
+    public void SetSSShaderBuffers(ComputeShader ssShader)
+    {
+        
     }
 }
