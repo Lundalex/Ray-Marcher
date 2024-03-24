@@ -1,10 +1,9 @@
 using UnityEngine;
 using Unity.Mathematics;
+using System;
 
 // Import utils from Resources.cs
 using Resources;
-using System;
-// Usage: Utils.(functionName)()
 
 public class Main : MonoBehaviour
 {
@@ -20,8 +19,14 @@ public class Main : MonoBehaviour
     [Range(0.0f, 2.0f)] public float DefocusStrength;
     public float focalPlaneFactor; // focalPlaneFactor must be positive
     public int FrameCount;
+    [Range(1, 100)] public int ChunksPerObject;
 
-    [Header("Scene")]
+    [Header("Scene settings")]
+    public float3 MinWorldBounds;
+    public float3 MaxWorldBounds;
+    public float CellSize;
+
+    [Header("Scene objects")]
     public float3 OBJ_Pos;
     public float3 OBJ_Rot;
     public float4[] SpheresInput; // xyz: pos; w: radii
@@ -36,7 +41,7 @@ public class Main : MonoBehaviour
     public ShaderHelper shaderHelper;
     public Mesh testMesh;
 
-    // Private variables
+    // Shader settings
     private int rmShaderThreadSize = 16; // /32
     private int pcShaderThreadSize = 512; // / 1024
     private int ssShaderThreadSize = 512; // / 1024
@@ -44,36 +49,59 @@ public class Main : MonoBehaviour
     private int Stride_Tri = sizeof(float) * 12 + sizeof(int) * 2;
     private int Stride_Sphere = sizeof(float) * 4 + sizeof(int) * 1;
     private int Stride_Material = sizeof(float) * 8 + sizeof(int) * 0;
-    private TriObject[] TriObjects;
-    private Tri[] Tris;
-    private Sphere[] Spheres;
-    private Material2[] Materials;
+
+    // Non-inpector-accessible variables
+
+    // Scene objects
+    public TriObject[] TriObjects;
+    public Tri[] Tris;
+    public Sphere[] Spheres;
+    public Material2[] Materials;
     public ComputeBuffer B_TriObjects;
     public ComputeBuffer B_Tris;
     public ComputeBuffer B_Spheres;
     public ComputeBuffer B_Materials;
 
+    // Spatial sort
+    public ComputeBuffer B_SpatialLookup;
+    public ComputeBuffer B_StartIndices;
+    public ComputeBuffer AC_OccupiedChunks;
+    public ComputeBuffer CB_A;
     private bool ProgramStarted = false;
     private Vector3 lastCameraPosition;
     private Quaternion lastCameraRotation;
 
+    // Constants calculated at start
+    [NonSerialized] public int NumObjects;
+    [NonSerialized] public int NumSpheres;
+    [NonSerialized] public int NumTris;
+    [NonSerialized] public int NumObjects_NextPow2;
+    [NonSerialized] public int4 NumChunks;
+    [NonSerialized] public int NumChunksAll;
+    [NonSerialized] public float3 ChunkGridOffset;
+
     void Start()
     {
         Camera.main.cullingMask = 0;
-        
+        FrameCount = 0;
         lastCameraPosition = transform.position;
 
-        B_Spheres = new ComputeBuffer(SpheresInput.Length, Stride_Sphere);
-        B_Materials = new ComputeBuffer(MatTypesInput1.Length, Stride_Material);
-
-        UpdateSetData();
+        SetSceneObjects();
         LoadOBJ();
 
-        shaderHelper.SetRMShaderBuffers(rmShader);
+        SetConstants();
+
+        InitBuffers();
+
+        // PreCalc
         shaderHelper.SetPCShaderBuffers(pcShader);
 
-        UpdatePerFrame();
-        UpdateSettings();
+        // SpatialSort
+        shaderHelper.SetSSSettings(ssShader);
+
+        // RayMarcher
+        shaderHelper.UpdateRMVariables(rmShader);
+        shaderHelper.SetRMSettings(rmShader);
 
         ProgramStarted = true;
     }
@@ -103,11 +131,40 @@ public class Main : MonoBehaviour
                 parentKey = 0,
             };
         }
-
-        B_Tris = new ComputeBuffer(Tris.Length, Stride_Tri);
+        B_Tris ??= new ComputeBuffer(Tris.Length, Stride_Tri);
         B_Tris.SetData(Tris);
 
         SetTriObjectData();
+    }
+
+    void SetConstants()
+    {
+        NumSpheres = Spheres.Length;
+        NumTris = Tris.Length;
+        NumObjects = NumSpheres + NumTris;
+        NumObjects_NextPow2 = Func.NextPow2(NumObjects);
+
+        float3 ChunkGridDiff = MaxWorldBounds - MinWorldBounds;
+        NumChunks = new(Mathf.CeilToInt(ChunkGridDiff.x / CellSize),
+                        Mathf.CeilToInt(ChunkGridDiff.y / CellSize),
+                        Mathf.CeilToInt(ChunkGridDiff.z / CellSize), 0);
+        NumChunks.w = NumChunks.x * NumChunks.y;
+        NumChunksAll = NumChunks.x * NumChunks.y * NumChunks.z;
+
+        ChunkGridOffset = new float3(
+            Mathf.Max(-MinWorldBounds.x, 0.0f),
+            Mathf.Max(-MinWorldBounds.y, 0.0f),
+            Mathf.Max(-MinWorldBounds.z, 0.0f)
+        );
+    }
+
+    void InitBuffers()
+    {
+        B_SpatialLookup ??= new ComputeBuffer(Func.NextPow2(NumObjects * ChunksPerObject), sizeof(int) * 2);
+        B_StartIndices ??= new ComputeBuffer(NumChunksAll, sizeof(int));
+
+        AC_OccupiedChunks ??= new ComputeBuffer(Func.NextPow2(NumObjects * ChunksPerObject), sizeof(int) * 2, ComputeBufferType.Append);
+        CB_A = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
     }
 
     void SetTriObjectData()
@@ -122,95 +179,47 @@ public class Main : MonoBehaviour
                 rot = OBJ_Rot,
                 containedRadius = 0.0f,
                 triStart = 0,
-                triEnd = Tris.Length - 1,
+                triEnd = NumTris - 1,
             };
         }
-
         B_TriObjects ??= new ComputeBuffer(TriObjects.Length, Stride_TriObject);
-
         B_TriObjects.SetData(TriObjects);
     }
 
     void Update()
     {
-        UpdatePerFrame();
+        shaderHelper.UpdateRMVariables(rmShader);
     }
 
     void LateUpdate()
     {
         if (transform.position != lastCameraPosition || transform.rotation != lastCameraRotation)
         {
-            UpdateSettings();
+            FrameCount = 0;
+
+            SetTriObjectData();
+            SetSceneObjects();
+            shaderHelper.SetRMSettings(rmShader);
+
             lastCameraPosition = transform.position;
             lastCameraRotation = transform.rotation;
         }
-    }
-
-    void UpdatePerFrame()
-    {
-        // Frame set variables
-        int FrameRand = UnityEngine.Random.Range(0, 999999);
-        rmShader.SetInt("FrameRand", FrameRand);
-        rmShader.SetInt("FrameCount", FrameCount++);
-
-        // Camera position
-        float3 worldSpaceCameraPos = transform.position;
-        float[] worldSpaceCameraPosArray = new float[] { worldSpaceCameraPos.x, worldSpaceCameraPos.y, worldSpaceCameraPos.z };
-        rmShader.SetFloats("WorldSpaceCameraPos", worldSpaceCameraPosArray);
-
-        // Camera orientation
-        float3 cameraRot = transform.rotation.eulerAngles;
-        float[] cameraRotArray = new float[] { cameraRot.x, cameraRot.y, cameraRot.z };
-        rmShader.SetFloats("CameraRotation", Func.DegreesToRadians(cameraRotArray));
     }
 
     private void OnValidate()
     {
         if (ProgramStarted)
         {
+            FrameCount = 0;
+
             SetTriObjectData();
-            UpdateSettings();
+            SetSceneObjects();
+            shaderHelper.SetRMSettings(rmShader);
         }
     }
 
-    void UpdateSettings()
+    void SetSceneObjects()
     {
-        FrameCount = 0;
-        UpdateSetData();
-
-        shaderHelper.SetRMShaderBuffers(rmShader);
-
-        rmShader.SetInt("NumTriObjects", TriObjects.Length);
-        rmShader.SetInt("NumTris", Tris.Length);
-        rmShader.SetInt("NumSpheres", Spheres.Length);
-        rmShader.SetInt("NumMaterials", Materials.Length);
-
-        int[] resolutionArray = new int[] { Resolution.x, Resolution.y };
-        rmShader.SetInts("Resolution", resolutionArray);
-
-        // Ray setup settings
-        rmShader.SetInt("MaxStepCount", MaxStepCount);
-        rmShader.SetInt("RaysPerPixel", RaysPerPixel);
-
-        rmShader.SetFloat("HitThreshold", HitThreshold);
-
-        rmShader.SetFloat("ScatterProbability", ScatterProbability);
-        rmShader.SetFloat("DefocusStrength", DefocusStrength);
-
-        // Screen settings
-        float aspectRatio = Resolution.x / Resolution.y;
-        float fieldOfViewRad = fieldOfView * Mathf.PI / 180;
-        float viewSpaceHeight = Mathf.Tan(fieldOfViewRad * 0.5f);
-        float viewSpaceWidth = aspectRatio * viewSpaceHeight;
-        rmShader.SetFloat("viewSpaceWidth", viewSpaceWidth);
-        rmShader.SetFloat("viewSpaceHeight", viewSpaceHeight);
-
-        rmShader.SetFloat("focalPlaneFactor", focalPlaneFactor);
-    }
-
-    void UpdateSetData()
-    {
-
         // Set Spheres data
         Spheres = new Sphere[SpheresInput.Length];
         for (int i = 0; i < Spheres.Length; i++)
@@ -222,6 +231,7 @@ public class Main : MonoBehaviour
                 materialKey = i == 0 ? 1 : 0,
             };
         }
+        B_Spheres ??= new ComputeBuffer(SpheresInput.Length, Stride_Sphere);
         B_Spheres.SetData(Spheres);
 
         // Set Materials data
@@ -236,6 +246,7 @@ public class Main : MonoBehaviour
                 smoothness = MatTypesInput2[i].x
             };
         }
+        B_Materials ??= new ComputeBuffer(MatTypesInput1.Length, Stride_Material);
         B_Materials.SetData(Materials);
     }
 
@@ -253,20 +264,60 @@ public class Main : MonoBehaviour
             rmShader.SetTexture(0, "Result", renderTexture);
         }
 
-        int2 threadGroupNums = Utils.GetThreadGroupsNumsXY(Resolution, rmShaderThreadSize);
-        rmShader.Dispatch(0, threadGroupNums.x, threadGroupNums.y, 1);
+        shaderHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
     }
 
     void RunSSShader()
     {
-        int threadGroupNum = Utils.GetThreadGroupsNums(1, ssShaderThreadSize);
-        ssShader.Dispatch(0, threadGroupNum, 1, 1);
+        // Fill OccupiedChunks
+        AC_OccupiedChunks.SetCounterValue(0);
+        shaderHelper.DispatchKernel(ssShader, "CalcSphereChunkKeys", NumSpheres, ssShaderThreadSize);
+        shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize);
+
+        // Get OccupiedChunks length
+        // THIS IS VERY EXPENSIVE SINCE IT REQUIRES DATA TO BE SENT FROM THE GPU TO THE CPU!
+        ComputeBuffer.CopyCount(AC_OccupiedChunks, CB_A, 0);
+        int[] OC_lenArr = new int[1];
+        CB_A.GetData(OC_lenArr);
+        int OC_len = Func.NextPow2(OC_lenArr[0]);
+
+        ssShader.SetInt("OC_len", OC_len);
+
+        // Copy OccupiedChunks -> SpatialLookup
+        shaderHelper.DispatchKernel(ssShader, "PopulateSpatialLookup", OC_len, ssShaderThreadSize);
+
+        // Sort SpatialLookup
+        int basebBlockLen = 2;
+        while (basebBlockLen != 2*OC_len) // basebBlockLen == len is the last outer iteration
+        {
+            int blockLen = basebBlockLen;
+            while (blockLen != 1) // blockLen == 2 is the last inner iteration
+            {
+                bool brownPinkSort = blockLen == basebBlockLen;
+
+                shaderHelper.UpdateSortIterationVariables(ssShader, blockLen, brownPinkSort);
+
+                shaderHelper.DispatchKernel(ssShader, "SortIteration", OC_len / 2, ssShaderThreadSize);
+
+                blockLen /= 2;
+            }
+            basebBlockLen *= 2;
+        }
+
+        // int2[] t_A = new int2[OC_len];
+        // B_SpatialLookup.GetData(t_A);
+
+        // Set StartIndices
+        shaderHelper.DispatchKernel(ssShader, "PopulateStartIndices", OC_len, ssShaderThreadSize);
+
+        // int[] t_B = new int[NumChunksAll];
+        // B_StartIndices.GetData(t_B);
+        // int a = 1;
     }
 
     void RunPCShader()
     {
-        int threadGroupNum = Utils.GetThreadGroupsNums(Tris.Length, pcShaderThreadSize);
-        pcShader.Dispatch(0, threadGroupNum, 1, 1);
+        shaderHelper.DispatchKernel(pcShader, "CalcTriNormals", Tris.Length, pcShaderThreadSize);
     }
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)
@@ -280,9 +331,16 @@ public class Main : MonoBehaviour
 
     void OnDestroy()
     {
+        // Scene objects
         B_TriObjects?.Release();
         B_Tris?.Release();
         B_Spheres?.Release();
         B_Materials?.Release();
+
+        // Spatial sort
+        B_SpatialLookup?.Release();
+        B_StartIndices?.Release();
+        AC_OccupiedChunks?.Release();
+        CB_A?.Release();
     }
 }

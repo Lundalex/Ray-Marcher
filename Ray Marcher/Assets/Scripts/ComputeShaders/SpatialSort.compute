@@ -1,11 +1,236 @@
-#pragma kernel k1 // 0
+#pragma kernel CalcSphereChunkKeys // 0
+#pragma kernel CalcTriChunkKeys // 1
+#pragma kernel PopulateSpatialLookup // 2
+#pragma kernel SortIteration // 3
+#pragma kernel PopulateStartIndices // 4
 
 #include "MathResourcesRT.hlsl"
 
 static const int ThreadsNum = 512;
 
-[numthreads(ThreadsNum,1,1)]
-void k1 (uint3 id : SV_DispatchThreadID)
-{
+// Num constants
+const int4 NumChunks; // x, y, z, x*y
+const int NumChunksAll;
+const int NumObjects; // NumSpheres + NumTris
+const int NumSpheres;
+const int NumObjects_NextPow2;
 
+// World settings
+const float CellSize;
+const float3 MinWorldBounds;
+const float3 MaxWorldBounds;
+const float3 ChunkGridOffset;
+
+// Per-iteration-set constants
+const bool BrownPinkSort; // True -> BrownSort, False -> PinkSort
+const int BlockLen;
+
+const int OC_len;
+
+// Shader input structs
+struct TriObject
+{
+    float3 pos;
+    float3 rot;
+    float containedRadius;
+    int triStart;
+    int triEnd;
+};
+struct Tri // Triangle
+{
+    float3 vA;
+    float3 vB;
+    float3 vC;
+    float3 normal;
+    int materialKey;
+    int parentKey;
+};
+struct Sphere
+{
+    float3 pos;
+    float radius;
+    int materialKey;
+};
+
+AppendStructuredBuffer<int2> OccupiedChunksAPPEND;
+ConsumeStructuredBuffer<int2> OccupiedChunksCONSUME;
+
+RWStructuredBuffer<int2> SpatialLookup; // [ParticlesNum](particleIndex, ChunkKey)
+RWStructuredBuffer<int> StartIndices;
+
+RWStructuredBuffer<TriObject> TriObjects;
+RWStructuredBuffer<Tri> Tris;
+RWStructuredBuffer<Sphere> Spheres;
+
+void SwapInt2(inout int2 a, inout int2 b)
+{
+    int2 temp = a;
+    a = b;
+    b = temp;
+}
+
+int GetChunkKeyFromPosition(float3 pos)
+{
+    int3 chunk = (int3)(pos / CellSize);
+
+    int chunkKey = chunk.x + chunk.y*NumChunks.x + chunk.z*NumChunks.w;
+    return chunkKey;
+}
+
+bool IsOutsideBoundsMin(float3 point2)
+{
+    if (MinWorldBounds.x > point2.x
+     || MinWorldBounds.y > point2.y
+     || MinWorldBounds.z > point2.z) { return true; }
+    return false;
+}
+
+bool IsOutsideBoundsMax(float3 point2)
+{
+    if (MinWorldBounds.x > point2.x
+     || MinWorldBounds.y > point2.y
+     || MinWorldBounds.z > point2.z) { return true; }
+    return false;
+}
+
+void ApplyChunkGridOffset(inout float3 point2)
+{
+    point2 += ChunkGridOffset;
+}
+
+[numthreads(ThreadsNum,1,1)]
+void CalcSphereChunkKeys (uint3 id : SV_DispatchThreadID)
+{
+    int i = id.x;
+    if (i >= NumObjects_NextPow2) { return; }
+
+    Sphere sphere = Spheres[i];
+
+    if (IsOutsideBoundsMin(sphere.pos - sphere.radius) || IsOutsideBoundsMax(sphere.pos + sphere.radius)) { return; } // Triangle at least partially out of bounds
+
+    // Ensure all coords are positive
+    ApplyChunkGridOffset(sphere.pos);
+
+    int centerChunkKey = GetChunkKeyFromPosition(sphere.pos);
+    int offsetRange = ceil(sphere.radius / CellSize);
+    
+    for (int x = -offsetRange; x < offsetRange; x++)
+    {
+        for (int y = -offsetRange; y < offsetRange; y++)
+        {
+            int xy = x + y*NumChunks.x;
+            for (int z = -offsetRange; z < offsetRange; z++)
+            {
+                int offsetChunkKey = centerChunkKey + xy + z*NumChunks.w;
+                int2 chunkObjectPair = int2(i, offsetChunkKey);
+                OccupiedChunksAPPEND.Append(chunkObjectPair);
+            }
+        }
+    }
+}
+
+[numthreads(ThreadsNum,1,1)]
+void CalcTriChunkKeys (uint3 id : SV_DispatchThreadID)
+{
+    int i = id.x;
+    if (i >= NumObjects_NextPow2) { return; }
+
+    Tri tri = Tris[i];
+    float3 parentPos = TriObjects[tri.parentKey].pos;
+
+    tri.vA += parentPos;
+    tri.vB += parentPos;
+    tri.vC += parentPos;
+    
+    // Calculate the chunk key for the triangle
+    float3 minBounds = min(min(tri.vA, tri.vB), tri.vC);
+    float3 maxBounds = max(max(tri.vA, tri.vB), tri.vC);
+
+    if (IsOutsideBoundsMin(minBounds) || IsOutsideBoundsMax(maxBounds)) { return; } // Triangle at least partially out of bounds
+
+    // Ensure all coords are positive
+    ApplyChunkGridOffset(minBounds);
+    ApplyChunkGridOffset(maxBounds);
+
+    int3 minChunk = int3(minBounds / CellSize);
+    int3 maxChunk = int3(maxBounds / CellSize);
+
+    for (int x = minChunk.x; x <= maxChunk.x; x++)
+    {
+        for (int y = minChunk.y; y <= maxChunk.y; y++)
+        {
+            int xy = x + y*NumChunks.x;
+            for (int z = minChunk.z; z <= maxChunk.z; z++)
+            {
+                int chunkKey = xy + z*NumChunks.w;
+                int objectKey = i + NumSpheres;
+                int2 chunkObjectPair = int2(objectKey, chunkKey);
+                OccupiedChunksAPPEND.Append(chunkObjectPair);
+            }
+        }
+    }
+}
+
+[numthreads(ThreadsNum,1,1)]
+void PopulateSpatialLookup (uint3 id : SV_DispatchThreadID)
+{
+    int i = id.x;
+    if (i >= OC_len) { return; }
+
+    int2 chunkObjectPair = OccupiedChunksCONSUME.Consume();
+    if (chunkObjectPair.x != 0 || chunkObjectPair.y != 0)
+    {
+        SpatialLookup[i] = chunkObjectPair;
+    }
+    else
+    {
+        SpatialLookup[i] = int2(OC_len, NumChunksAll); // No object
+    }
+}
+
+[numthreads(ThreadsNum,1,1)]
+void SortIteration (uint3 id : SV_DispatchThreadID)
+{
+    int lowRef = id.x;
+    if (lowRef >= OC_len) { return; }
+
+    int relBlock = (int)(2 * lowRef / (uint)BlockLen);
+    int relPos = lowRef % (0.5 * BlockLen);
+
+    int lowIndex = relBlock * BlockLen + relPos;
+
+    int highIndex = BrownPinkSort
+    ? relBlock * BlockLen + BlockLen - 1 - relPos
+    :relBlock * BlockLen + relPos + (int)(BlockLen * 0.5);
+
+    int2 lowValue = SpatialLookup[lowIndex];
+    int2 highValue = SpatialLookup[highIndex];
+
+    // Sort by:
+    // A: y ascending
+    // B: x ascending
+    if (lowValue.y > highValue.y || (lowValue.y == highValue.y && lowValue.x > highValue.x))
+    {
+        SwapInt2(SpatialLookup[highIndex], SpatialLookup[lowIndex]);
+    }
+}
+
+[numthreads(ThreadsNum,1,1)]
+void PopulateStartIndices (uint3 id : SV_DispatchThreadID)
+{
+    int i = id.x;
+    if (i >= NumObjects) { return; }
+    
+    int chunkKey = SpatialLookup[i].y;
+    int LastChunkKey = NumChunksAll;
+
+    if (i != 0)
+    {
+        LastChunkKey = SpatialLookup[i-1].y;
+    }
+
+    if (chunkKey != LastChunkKey)
+    {
+        StartIndices[chunkKey] = i;
+    }
 }

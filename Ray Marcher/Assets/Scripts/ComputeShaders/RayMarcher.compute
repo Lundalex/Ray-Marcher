@@ -21,6 +21,10 @@ const float HitThreshold;
 const float ScatterProbability;
 const float DefocusStrength;
 
+// World settings
+const float3 MinWorldBounds;
+const float3 MaxWorldBounds;
+
 // View settings
 const int2 Resolution;
 const float viewSpaceWidth;
@@ -97,6 +101,17 @@ RWStructuredBuffer<Sphere> Spheres;
 // Shader output buffer
 RWTexture2D<float4> Result; // abc: rgb, d: opacity
 
+bool IsOutsideBounds(float3 point2)
+{
+    if (MinWorldBounds.x > point2.x
+     || MinWorldBounds.y > point2.y
+     || MinWorldBounds.z > point2.z
+     || MaxWorldBounds.x < point2.x
+     || MaxWorldBounds.y < point2.y
+     || MaxWorldBounds.z < point2.z) { return true; }
+    return false;
+}
+
 float3 ApplyCameraTransform(float3 point2)
 {
     float cosX = cos(CameraRotation.x);
@@ -150,22 +165,22 @@ StepInfo Step (Ray ray, inout int rngState)
     int materialKey = -1;
     float3 normal = float3(0.0, 0.0, 0.0);
 
-    // Tris
-    for (int triCount = 0; triCount < NumTris; triCount++)
-    {
-        Tri tri = Tris[triCount];
-        ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
+    // // Tris
+    // for (int triCount = 0; triCount < NumTris; triCount++)
+    // {
+    //     Tri tri = Tris[triCount];
+    //     ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
 
-        float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
-        float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
+    //     float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
+    //     float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
 
-        if (dstSqr < nearDstSqr)
-        {
-            nearDstSqr = dstSqr;
-            materialKey = tri.materialKey;
-            normal = tri.normal;
-        }
-    }
+    //     if (dstSqr < nearDstSqr)
+    //     {
+    //         nearDstSqr = dstSqr;
+    //         materialKey = tri.materialKey;
+    //         normal = tri.normal;
+    //     }
+    // }
 
     // Spheres
     for (int sphereCount = 0; sphereCount < NumSpheres; sphereCount++)
@@ -195,8 +210,8 @@ StepInfo Step (Ray ray, inout int rngState)
 TraceInfo Trace (Ray ray, inout int rngState)
 {
     TraceInfo traceInfo;
-    traceInfo.rayColor = float3(1, 1, 1); // Default is (1, 1, 1)
-    traceInfo.incomingLight = float3(0, 0, 0); // Default incoming light is (0, 0, 0)
+    traceInfo.rayColor = 1; // Default is (1, 1, 1)
+    traceInfo.incomingLight = 0; // Default incoming light is (0, 0, 0)
     // traceInfo.incomingLight = abs(randPointOnUnitSphere(rngState));
 
     // Step through scene
@@ -206,6 +221,7 @@ TraceInfo Trace (Ray ray, inout int rngState)
 
         // March by nearest dst length
         ray.pos += stepInfo.nearDst * ray.dir;
+        if (IsOutsideBounds(ray.pos)) { return traceInfo; }
 
         // Hit?
         if (stepInfo.nearDst < HitThreshold)
@@ -237,8 +253,6 @@ TraceInfo Trace (Ray ray, inout int rngState)
             traceInfo.incomingLight += emittedLight * traceInfo.rayColor;
             traceInfo.rayColor *= lerp(material.color, material.specularColor, isSpecularBounce);
         }
-
-        if (stepInfo.nearDst > 20) { return traceInfo; } // Probably outside scene
     }
 
     return traceInfo;
@@ -251,10 +265,9 @@ void TraceRays (uint3 id : SV_DispatchThreadID)
     int rngState = id.y * Resolution.x + id.x + FrameRand;
 
     // Calculate focal plane world position for the given pixel
-    float focalPosX = (float(id.x) / Resolution.x - 0.5) * 2.0 * viewSpaceWidth;
-    float focalPosY = (float(id.y) / Resolution.y - 0.5) * 2.0 * viewSpaceHeight;
-    float3 focalPos = float3(focalPosX, focalPosY, 1) * focalPlaneFactor;
-    float3 worldFocalPos = ApplyCameraTransform(focalPos) + WorldSpaceCameraPos;
+    float2 focalPos = (float2(id.xy) / Resolution - 0.5) * 2.0 * float2(viewSpaceWidth, viewSpaceHeight);
+    float3 focalPosScaled = float3(focalPos.x, focalPos.y, 1) * focalPlaneFactor;
+    float3 worldFocalPos = ApplyCameraTransform(focalPosScaled) + WorldSpaceCameraPos;
 
     // Trace ray(s) through the scene
     TraceInfo combinedTraceInfo;

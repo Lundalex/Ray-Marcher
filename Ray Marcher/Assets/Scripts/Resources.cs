@@ -57,7 +57,7 @@ namespace Resources
             return MousePressed;
         }
 
-        public static int GetThreadGroupsNums(int threadsNum, int threadSize)
+        public static int GetThreadGroupsNum(int threadsNum, int threadSize)
         {
             int threadGroupsNum = (int)Math.Ceiling((float)threadsNum / threadSize);
             return threadGroupsNum;
@@ -65,22 +65,27 @@ namespace Resources
 
         public static int2 GetThreadGroupsNumsXY(int2 threadsNum, int threadSize)
         {
-            int threadGroupsNumX = GetThreadGroupsNums(threadsNum.x, threadSize);
-            int threadGroupsNumY = GetThreadGroupsNums(threadsNum.y, threadSize);
+            int threadGroupsNumX = GetThreadGroupsNum(threadsNum.x, threadSize);
+            int threadGroupsNumY = GetThreadGroupsNum(threadsNum.y, threadSize);
             return new(threadGroupsNumX, threadGroupsNumY);
         }
     }
 
     public class Func
     {
-        public static float[] DegreesToRadians(float[] degreesArray)
+        public static int Log2(int a, bool doCeil = false)
         {
-            float[] radiansArray = new float[degreesArray.Length];
-            for (int i = 0; i < degreesArray.Length; i++)
+            double logValue = Math.Log(a, 2);
+            return doCeil ? (int)Math.Ceiling(logValue) : (int)logValue;
+        }
+        public static int NextPow2(int a)
+        {
+            int nextPow2 = 1;
+            while (nextPow2 < a)
             {
-                radiansArray[i] = degreesArray[i] * Mathf.Deg2Rad;
+                nextPow2 *= 2;
             }
-            return radiansArray;
+            return nextPow2;
         }
     }
 }
