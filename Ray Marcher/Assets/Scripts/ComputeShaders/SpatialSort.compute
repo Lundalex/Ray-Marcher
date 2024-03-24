@@ -102,11 +102,11 @@ void ApplyChunkGridOffset(inout float3 point2)
 void CalcSphereChunkKeys (uint3 id : SV_DispatchThreadID)
 {
     int i = id.x;
-    if (i >= NumObjects_NextPow2) { return; }
+    if (i >= NumObjects_NextPow2 || i >= NumSpheres) { return; }
 
     Sphere sphere = Spheres[i];
 
-    if (IsOutsideBoundsMin(sphere.pos - sphere.radius) || IsOutsideBoundsMax(sphere.pos + sphere.radius)) { return; } // Triangle at least partially out of bounds
+    if (IsOutsideBoundsMin(sphere.pos - sphere.radius) || IsOutsideBoundsMax(sphere.pos + sphere.radius)) { return; } // Sphere at least partially out of bounds
 
     // Ensure all coords are positive
     ApplyChunkGridOffset(sphere.pos);
@@ -137,6 +137,8 @@ void CalcTriChunkKeys (uint3 id : SV_DispatchThreadID)
 
     Tri tri = Tris[i];
     float3 parentPos = TriObjects[tri.parentKey].pos;
+
+    ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
 
     tri.vA += parentPos;
     tri.vB += parentPos;
@@ -219,7 +221,7 @@ void SortIteration (uint3 id : SV_DispatchThreadID)
 void PopulateStartIndices (uint3 id : SV_DispatchThreadID)
 {
     int i = id.x;
-    if (i >= NumObjects) { return; }
+    if (i >= OC_len) { return; }
     
     int chunkKey = SpatialLookup[i].y;
     int LastChunkKey = NumChunksAll;

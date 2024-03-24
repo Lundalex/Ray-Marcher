@@ -19,7 +19,7 @@ public class Main : MonoBehaviour
     [Range(0.0f, 2.0f)] public float DefocusStrength;
     public float focalPlaneFactor; // focalPlaneFactor must be positive
     public int FrameCount;
-    [Range(1, 100)] public int ChunksPerObject;
+    [Range(1, 1000)] public int ChunksPerObject;
 
     [Header("Scene settings")]
     public float3 MinWorldBounds;
@@ -280,6 +280,7 @@ public class Main : MonoBehaviour
         int[] OC_lenArr = new int[1];
         CB_A.GetData(OC_lenArr);
         int OC_len = Func.NextPow2(OC_lenArr[0]);
+        // Debug.Log(OC_lenArr[0]);
 
         ssShader.SetInt("OC_len", OC_len);
 

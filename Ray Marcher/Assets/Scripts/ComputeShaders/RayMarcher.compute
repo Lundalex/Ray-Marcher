@@ -7,9 +7,11 @@ static const int ThreadsNum = 16;
 static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
 
 // Num constants
+const int4 NumChunks; // x, y, z, x*y
 const int NumTriObjects;
 const int NumTris;
 const int NumSpheres;
+const int NumObjects; // NumSpheres + NumTris
 const int NumMaterials;
 
 // Ray setup settings
@@ -22,8 +24,10 @@ const float ScatterProbability;
 const float DefocusStrength;
 
 // World settings
+const float CellSize;
 const float3 MinWorldBounds;
 const float3 MaxWorldBounds;
+const float3 ChunkGridOffset;
 
 // View settings
 const int2 Resolution;
@@ -98,6 +102,9 @@ RWStructuredBuffer<TriObject> TriObjects;
 RWStructuredBuffer<Tri> Tris;
 RWStructuredBuffer<Sphere> Spheres;
 
+RWStructuredBuffer<int2> SpatialLookup; // [ParticlesNum](particleIndex, ChunkKey)
+RWStructuredBuffer<int> StartIndices;
+
 // Shader output buffer
 RWTexture2D<float4> Result; // abc: rgb, d: opacity
 
@@ -165,6 +172,53 @@ StepInfo Step (Ray ray, inout int rngState)
     int materialKey = -1;
     float3 normal = float3(0.0, 0.0, 0.0);
 
+    float3 offsetRayPos = ray.pos + ChunkGridOffset;
+    int3 chunk = int3(offsetRayPos / CellSize);
+
+    int chunkKey = chunk.x + chunk.y*NumChunks.x + chunk.z*NumChunks.w;
+    int startIndex = StartIndices[chunkKey];
+
+    int Index = startIndex;
+    while (Index < NumObjects && chunkKey == SpatialLookup[Index].y)
+    {
+        int objectIndex = SpatialLookup[Index].x;
+
+        if (objectIndex < NumSpheres)
+        {
+            // Calculate distance to sphere
+            Sphere sphere = Spheres[objectIndex];
+
+            float sgnDstSqr = sqr(SphereSgnDst(ray.pos, sphere));
+
+            if (sgnDstSqr < nearDstSqr)
+            {
+                nearDstSqr = sgnDstSqr;
+                materialKey = sphere.materialKey;
+                normal = normalize(ray.pos - sphere.pos);
+            }
+        }
+        else
+        {
+            // Calculate distance to tri
+            int triIndex = objectIndex - NumSpheres;
+            Tri tri = Tris[triIndex];
+
+            ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
+
+            float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
+            float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
+
+            if (dstSqr < nearDstSqr)
+            {
+                nearDstSqr = dstSqr;
+                materialKey = tri.materialKey;
+                normal = tri.normal;
+            }
+        }
+
+        Index += 1;
+    }
+
     // // Tris
     // for (int triCount = 0; triCount < NumTris; triCount++)
     // {
@@ -182,20 +236,20 @@ StepInfo Step (Ray ray, inout int rngState)
     //     }
     // }
 
-    // Spheres
-    for (int sphereCount = 0; sphereCount < NumSpheres; sphereCount++)
-    {
-        Sphere sphere = Spheres[sphereCount];
+    // // Spheres
+    // for (int sphereCount = 0; sphereCount < NumSpheres; sphereCount++)
+    // {
+    //     Sphere sphere = Spheres[sphereCount];
 
-        float sgnDstSqr = sqr(SphereSgnDst(ray.pos, sphere));
+    //     float sgnDstSqr = sqr(SphereSgnDst(ray.pos, sphere));
 
-        if (sgnDstSqr < nearDstSqr)
-        {
-            nearDstSqr = sgnDstSqr;
-            materialKey = sphere.materialKey;
-            normal = normalize(ray.pos - sphere.pos);
-        }
-    }
+    //     if (sgnDstSqr < nearDstSqr)
+    //     {
+    //         nearDstSqr = sgnDstSqr;
+    //         materialKey = sphere.materialKey;
+    //         normal = normalize(ray.pos - sphere.pos);
+    //     }
+    // }
 
     float nearDst = sqrt(nearDstSqr);
 
@@ -228,7 +282,7 @@ TraceInfo Trace (Ray ray, inout int rngState)
         {
             Material2 material = Materials[stepInfo.materialKey];
             
-            ray.pos -= (0.02 + stepInfo.nearDst) * ray.dir; // Revert last ray march step + epsilon offset
+            ray.pos -= (0.03 + stepInfo.nearDst) * ray.dir; // Revert last ray march step + epsilon offset
 
             // Calculate new ray origin
             ray.origin = ray.pos;

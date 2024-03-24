@@ -26,6 +26,8 @@ public class ShaderHelper : MonoBehaviour
         rmShader.SetBuffer(0, "Tris", m.B_Tris);
         rmShader.SetBuffer(0, "Spheres", m.B_Spheres);
         rmShader.SetBuffer(0, "Materials", m.B_Materials);
+        rmShader.SetBuffer(0, "SpatialLookup", m.B_SpatialLookup);
+        rmShader.SetBuffer(0, "StartIndices", m.B_StartIndices);
     }
 
     public void SetPCShaderBuffers (ComputeShader pcShader)
@@ -56,8 +58,10 @@ public class ShaderHelper : MonoBehaviour
     {
         SetRMShaderBuffers(rmShader);
 
+        rmShader.SetVector("NumChunks", new Vector4(m.NumChunks.x, m.NumChunks.y, m.NumChunks.z, m.NumChunks.w));
         rmShader.SetInt("NumTriObjects", m.TriObjects.Length);
         rmShader.SetInt("NumTris", m.Tris.Length);
+        rmShader.SetInt("NumObjects", m.NumObjects);
         rmShader.SetInt("NumSpheres", m.Spheres.Length);
         rmShader.SetInt("NumMaterials", m.Materials.Length);
 
@@ -65,6 +69,8 @@ public class ShaderHelper : MonoBehaviour
 
         rmShader.SetVector("MinWorldBounds", new Vector3(m.MinWorldBounds.x, m.MinWorldBounds.y, m.MinWorldBounds.z));
         rmShader.SetVector("MaxWorldBounds", new Vector3(m.MaxWorldBounds.x, m.MaxWorldBounds.y, m.MaxWorldBounds.z));
+        rmShader.SetVector("ChunkGridOffset", new Vector3(m.ChunkGridOffset.x, m.ChunkGridOffset.y, m.ChunkGridOffset.z));
+        rmShader.SetFloat("CellSize", m.CellSize);
 
         // Ray setup settings
         rmShader.SetInt("MaxStepCount", m.MaxStepCount);
@@ -75,7 +81,7 @@ public class ShaderHelper : MonoBehaviour
 
         // Screen settings
         float aspectRatio = m.Resolution.x / m.Resolution.y;
-        float fieldOfViewRad = m.fieldOfView * Mathf.PI / 180;
+        float fieldOfViewRad = m.fieldOfView * Mathf.Deg2Rad;
         float viewSpaceHeight = Mathf.Tan(fieldOfViewRad * 0.5f);
         float viewSpaceWidth = aspectRatio * viewSpaceHeight;
         rmShader.SetFloat("viewSpaceWidth", viewSpaceWidth);
