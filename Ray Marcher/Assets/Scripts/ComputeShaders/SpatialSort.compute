@@ -112,7 +112,7 @@ void CalcSphereChunkKeys (uint3 id : SV_DispatchThreadID)
     ApplyChunkGridOffset(sphere.pos);
 
     int centerChunkKey = GetChunkKeyFromPosition(sphere.pos);
-    int offsetRange = ceil(sphere.radius / CellSize);
+    int offsetRange = ceil(sphere.radius / CellSize) + 1; // +1 ?????
     
     for (int x = -offsetRange; x < offsetRange; x++)
     {
@@ -140,10 +140,6 @@ void CalcTriChunkKeys (uint3 id : SV_DispatchThreadID)
 
     ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
 
-    tri.vA += parentPos;
-    tri.vB += parentPos;
-    tri.vC += parentPos;
-    
     // Calculate the chunk key for the triangle
     float3 minBounds = min(min(tri.vA, tri.vB), tri.vC);
     float3 maxBounds = max(max(tri.vA, tri.vB), tri.vC);
@@ -154,8 +150,8 @@ void CalcTriChunkKeys (uint3 id : SV_DispatchThreadID)
     ApplyChunkGridOffset(minBounds);
     ApplyChunkGridOffset(maxBounds);
 
-    int3 minChunk = int3(minBounds / CellSize);
-    int3 maxChunk = int3(maxBounds / CellSize);
+    int3 minChunk = int3(floor((minBounds + parentPos) / CellSize));
+    int3 maxChunk = int3(floor((maxBounds + parentPos) / CellSize));
 
     for (int x = minChunk.x; x <= maxChunk.x; x++)
     {
@@ -203,7 +199,7 @@ void SortIteration (uint3 id : SV_DispatchThreadID)
 
     int highIndex = BrownPinkSort
     ? relBlock * BlockLen + BlockLen - 1 - relPos
-    :relBlock * BlockLen + relPos + (int)(BlockLen * 0.5);
+    : relBlock * BlockLen + relPos + (int)(BlockLen * 0.5);
 
     int2 lowValue = SpatialLookup[lowIndex];
     int2 highValue = SpatialLookup[highIndex];

@@ -5,6 +5,7 @@
 static const int ThreadsNum = 16;
 
 static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
+const float MaxStepSize;
 
 // Num constants
 const int4 NumChunks; // x, y, z, x*y
@@ -168,7 +169,7 @@ float TriDstSqr( float3 p, float3 a, float3 b, float3 c )
 
 StepInfo Step (Ray ray, inout int rngState)
 {
-    float nearDstSqr = FLT_MAX;
+    float nearDstSqr = MaxStepSize;
     int materialKey = -1;
     float3 normal = float3(0.0, 0.0, 0.0);
 
@@ -202,7 +203,7 @@ StepInfo Step (Ray ray, inout int rngState)
             // Calculate distance to tri
             int triIndex = objectIndex - NumSpheres;
             Tri tri = Tris[triIndex];
-
+            
             ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
 
             float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
@@ -218,38 +219,6 @@ StepInfo Step (Ray ray, inout int rngState)
 
         Index += 1;
     }
-
-    // // Tris
-    // for (int triCount = 0; triCount < NumTris; triCount++)
-    // {
-    //     Tri tri = Tris[triCount];
-    //     ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
-
-    //     float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
-    //     float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
-
-    //     if (dstSqr < nearDstSqr)
-    //     {
-    //         nearDstSqr = dstSqr;
-    //         materialKey = tri.materialKey;
-    //         normal = tri.normal;
-    //     }
-    // }
-
-    // // Spheres
-    // for (int sphereCount = 0; sphereCount < NumSpheres; sphereCount++)
-    // {
-    //     Sphere sphere = Spheres[sphereCount];
-
-    //     float sgnDstSqr = sqr(SphereSgnDst(ray.pos, sphere));
-
-    //     if (sgnDstSqr < nearDstSqr)
-    //     {
-    //         nearDstSqr = sgnDstSqr;
-    //         materialKey = sphere.materialKey;
-    //         normal = normalize(ray.pos - sphere.pos);
-    //     }
-    // }
 
     float nearDst = sqrt(nearDstSqr);
 

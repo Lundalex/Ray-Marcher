@@ -18,6 +18,7 @@ public class Main : MonoBehaviour
     [Range(0.0f, 1.0f)] public float ScatterProbability;
     [Range(0.0f, 2.0f)] public float DefocusStrength;
     public float focalPlaneFactor; // focalPlaneFactor must be positive
+    public float MaxStepSize;
     public int FrameCount;
     [Range(1, 1000)] public int ChunksPerObject;
 
@@ -123,9 +124,9 @@ public class Main : MonoBehaviour
 
             Tris[triCount] = new Tri
             {
-                vA = vertices[indexA],
-                vB = vertices[indexB],
-                vC = vertices[indexC],
+                vA = vertices[indexA] * 2,
+                vB = vertices[indexB] * 2,
+                vC = vertices[indexC] * 2,
                 normal = new float3(0.0f, 0.0f, 0.0f), // init data
                 materialKey = 0,
                 parentKey = 0,
@@ -272,7 +273,7 @@ public class Main : MonoBehaviour
         // Fill OccupiedChunks
         AC_OccupiedChunks.SetCounterValue(0);
         shaderHelper.DispatchKernel(ssShader, "CalcSphereChunkKeys", NumSpheres, ssShaderThreadSize);
-        shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize);
+        // shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize);
 
         // Get OccupiedChunks length
         // THIS IS VERY EXPENSIVE SINCE IT REQUIRES DATA TO BE SENT FROM THE GPU TO THE CPU!
@@ -305,8 +306,8 @@ public class Main : MonoBehaviour
             basebBlockLen *= 2;
         }
 
-        // int2[] t_A = new int2[OC_len];
-        // B_SpatialLookup.GetData(t_A);
+        int2[] t_A = new int2[OC_len];
+        B_SpatialLookup.GetData(t_A);
 
         // Set StartIndices
         shaderHelper.DispatchKernel(ssShader, "PopulateStartIndices", OC_len, ssShaderThreadSize);

@@ -239,8 +239,9 @@ MonoBehaviour:
   ScatterProbability: 0.7
   DefocusStrength: 0
   focalPlaneFactor: 16.7
+  MaxStepSize: 2
   FrameCount: 0
-  ChunksPerObject: 100
+  ChunksPerObject: 223
   MinWorldBounds:
     x: -40
     y: -40
