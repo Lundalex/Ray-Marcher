@@ -43,7 +43,7 @@ public class Main : MonoBehaviour
     public Mesh testMesh;
 
     // Shader settings
-    private int rmShaderThreadSize = 16; // /32
+    private int rmShaderThreadSize = 8; // /32
     private int pcShaderThreadSize = 512; // / 1024
     private int ssShaderThreadSize = 512; // / 1024
     private int Stride_TriObject = sizeof(float) * 7 + sizeof(int) * 2;
@@ -124,15 +124,15 @@ public class Main : MonoBehaviour
 
             Tris[triCount] = new Tri
             {
-                vA = vertices[indexA] * 2,
-                vB = vertices[indexB] * 2,
-                vC = vertices[indexC] * 2,
+                vA = vertices[indexA] * 1.5f,
+                vB = vertices[indexB] * 1.5f,
+                vC = vertices[indexC] * 1.5f,
                 normal = new float3(0.0f, 0.0f, 0.0f), // init data
                 materialKey = 0,
                 parentKey = 0,
             };
         }
-        B_Tris ??= new ComputeBuffer(Tris.Length, Stride_Tri);
+        B_Tris = new ComputeBuffer(Tris.Length, Stride_Tri);
         B_Tris.SetData(Tris);
 
         SetTriObjectData();
@@ -268,20 +268,20 @@ public class Main : MonoBehaviour
         shaderHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
     }
 
+    
     void RunSSShader()
     {
         // Fill OccupiedChunks
         AC_OccupiedChunks.SetCounterValue(0);
         shaderHelper.DispatchKernel(ssShader, "CalcSphereChunkKeys", NumSpheres, ssShaderThreadSize);
-        // shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize);
+        shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize);
 
         // Get OccupiedChunks length
-        // THIS IS VERY EXPENSIVE SINCE IT REQUIRES DATA TO BE SENT FROM THE GPU TO THE CPU!
+        // THIS IS QUITE EXPENSIVE SINCE IT REQUIRES DATA TO BE SENT FROM THE GPU TO THE CPU!
         ComputeBuffer.CopyCount(AC_OccupiedChunks, CB_A, 0);
         int[] OC_lenArr = new int[1];
         CB_A.GetData(OC_lenArr);
         int OC_len = Func.NextPow2(OC_lenArr[0]);
-        // Debug.Log(OC_lenArr[0]);
 
         ssShader.SetInt("OC_len", OC_len);
 
@@ -306,15 +306,15 @@ public class Main : MonoBehaviour
             basebBlockLen *= 2;
         }
 
-        int2[] t_A = new int2[OC_len];
-        B_SpatialLookup.GetData(t_A);
-
         // Set StartIndices
         shaderHelper.DispatchKernel(ssShader, "PopulateStartIndices", OC_len, ssShaderThreadSize);
 
+        // int2[] t_A = new int2[OC_len];
+        // B_SpatialLookup.GetData(t_A);
+        
         // int[] t_B = new int[NumChunksAll];
         // B_StartIndices.GetData(t_B);
-        // int a = 1;
+
     }
 
     void RunPCShader()

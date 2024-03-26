@@ -233,15 +233,15 @@ MonoBehaviour:
   Resolution:
     x: 1920
     y: 1080
-  MaxStepCount: 50
+  MaxStepCount: 60
   RaysPerPixel: 1
   HitThreshold: 0.01
-  ScatterProbability: 0.7
+  ScatterProbability: 1
   DefocusStrength: 0
   focalPlaneFactor: 16.7
-  MaxStepSize: 2
+  MaxStepSize: 0.15
   FrameCount: 0
-  ChunksPerObject: 223
+  ChunksPerObject: 100
   MinWorldBounds:
     x: -40
     y: -40
@@ -250,20 +250,20 @@ MonoBehaviour:
     x: 40
     y: 40
     z: 40
-  CellSize: 5
+  CellSize: 1
   OBJ_Pos:
-    x: 0
-    y: 0
+    x: 2
+    y: -2
     z: 0
   OBJ_Rot:
     x: 0
-    y: 0
+    y: -3.76
     z: 0
   SpheresInput:
   - x: -5
     y: 1
     z: 4
-    w: 4.5
+    w: 5.92
   - x: -18
     y: -1
     z: -18
@@ -300,7 +300,7 @@ MonoBehaviour:
   - x: 1
     y: 1
     z: 1
-    w: 7
+    w: 5.92
   MatTypesInput2:
   - x: 1
     y: 0

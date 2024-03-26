@@ -58,7 +58,7 @@ public class ShaderHelper : MonoBehaviour
     {
         SetRMShaderBuffers(rmShader);
 
-        rmShader.SetFloat("MaxStepSize", m.MaxStepSize);
+        rmShader.SetFloat("MaxStepSize", Mathf.Max(0.05f, m.MaxStepSize)); // MaxStepSize == 0 will cause a crash
 
         rmShader.SetVector("NumChunks", new Vector4(m.NumChunks.x, m.NumChunks.y, m.NumChunks.z, m.NumChunks.w));
         rmShader.SetInt("NumTriObjects", m.TriObjects.Length);
