@@ -205,8 +205,6 @@ StepInfo Step (Ray ray, inout int rngState)
             int triIndex = objectIndex - NumSpheres;
             Tri tri = Tris[triIndex];
             
-            // ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
-
             float3 localRayPos = ray.pos - TriObjects[tri.parentKey].pos;
             float dstSqr = TriDstSqr(localRayPos, tri.vA, tri.vB, tri.vC);
 

@@ -1,6 +1,12 @@
--- Optimisations --
+Liquid render pipeline:
 
-Occlusion culling - Exclude spheres not in view, from being processed by the RT shader
-Spatial partitioning - Traverse through the scene along a grid, only checking collisions with spheres that are "near" each cell (preprocessing step)
+1. Simulate liquid step(s)
 
-ONLY POSITIVE COORDS ARE VALID
+2-a. Generate liquid isosurface (triangle) mesh
+2-b. Copy particle sphere positions into rendered spheres buffer
+
+3. Render with ray marching shader
+
+-----------------------------------------
+
+iso-surface mesh would probably render faster, but requires an extra step

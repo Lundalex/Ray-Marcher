@@ -241,7 +241,7 @@ MonoBehaviour:
   focalPlaneFactor: 16.7
   MaxStepSize: 0.15
   FrameCount: 0
-  ChunksPerObject: 100
+  ChunksPerObject: 50
   MinWorldBounds:
     x: -40
     y: -40
@@ -251,6 +251,7 @@ MonoBehaviour:
     y: 40
     z: 40
   CellSize: 1
+  RenderTris: 1
   OBJ_Pos:
     x: 2
     y: -2

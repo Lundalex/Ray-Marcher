@@ -28,6 +28,7 @@ public class Main : MonoBehaviour
     public float CellSize;
 
     [Header("Scene objects")]
+    public bool RenderTris;
     public float3 OBJ_Pos;
     public float3 OBJ_Rot;
     public float4[] SpheresInput; // xyz: pos; w: radii
@@ -295,7 +296,7 @@ public class Main : MonoBehaviour
         // Fill OccupiedChunks
         AC_OccupiedChunks.SetCounterValue(0);
         shaderHelper.DispatchKernel(ssShader, "CalcSphereChunkKeys", NumSpheres, ssShaderThreadSize);
-        shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize);
+        if (RenderTris) { shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize); } 
 
         // Get OccupiedChunks length
         // THIS IS QUITE EXPENSIVE SINCE IT REQUIRES DATA TO BE SENT FROM THE GPU TO THE CPU!
@@ -346,8 +347,8 @@ public class Main : MonoBehaviour
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)
     {
-        // RunPCShader();
-        // if (SettingsChanged) { RunPCShader(); SettingsChanged = false; }
+        // Main program loop
+        if (SettingsChanged) { RunPCShader(); SettingsChanged = false; }
         RunSSShader();
         RunRMShader();
 
