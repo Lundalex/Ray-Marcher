@@ -46,7 +46,7 @@ public class Main : MonoBehaviour
     private int rmShaderThreadSize = 8; // /32
     private int pcShaderThreadSize = 512; // / 1024
     private int ssShaderThreadSize = 512; // / 1024
-    private int Stride_TriObject = sizeof(float) * 7 + sizeof(int) * 2;
+    private int Stride_TriObject = sizeof(float) * 10 + sizeof(int) * 2;
     private int Stride_Tri = sizeof(float) * 12 + sizeof(int) * 2;
     private int Stride_Sphere = sizeof(float) * 4 + sizeof(int) * 1;
     private int Stride_Material = sizeof(float) * 8 + sizeof(int) * 0;
@@ -69,12 +69,14 @@ public class Main : MonoBehaviour
     public ComputeBuffer AC_OccupiedChunks;
     public ComputeBuffer CB_A;
     private bool ProgramStarted = false;
+    private bool SettingsChanged = true;
     private Vector3 lastCameraPosition;
     private Quaternion lastCameraRotation;
 
     // Constants calculated at start
     [NonSerialized] public int NumObjects;
     [NonSerialized] public int NumSpheres;
+    [NonSerialized] public int NumTriObjects;
     [NonSerialized] public int NumTris;
     [NonSerialized] public int NumObjects_NextPow2;
     [NonSerialized] public int4 NumChunks;
@@ -99,6 +101,7 @@ public class Main : MonoBehaviour
 
         // SpatialSort
         shaderHelper.SetSSSettings(ssShader);
+        shaderHelper.SetPCSettings(pcShader);
 
         // RayMarcher
         shaderHelper.UpdateRMVariables(rmShader);
@@ -132,7 +135,7 @@ public class Main : MonoBehaviour
                 parentKey = 0,
             };
         }
-        B_Tris = new ComputeBuffer(Tris.Length, Stride_Tri);
+        B_Tris ??= new ComputeBuffer(Tris.Length, Stride_Tri);
         B_Tris.SetData(Tris);
 
         SetTriObjectData();
@@ -144,6 +147,8 @@ public class Main : MonoBehaviour
         NumTris = Tris.Length;
         NumObjects = NumSpheres + NumTris;
         NumObjects_NextPow2 = Func.NextPow2(NumObjects);
+
+        NumTriObjects = TriObjects.Length;
 
         float3 ChunkGridDiff = MaxWorldBounds - MinWorldBounds;
         NumChunks = new(Mathf.CeilToInt(ChunkGridDiff.x / CellSize),
@@ -170,7 +175,7 @@ public class Main : MonoBehaviour
 
     void SetTriObjectData()
     {
-        // Set TriObjects data
+        // Set new TriObjects data
         TriObjects = new TriObject[1];
         for (int i = 0; i < TriObjects.Length; i++)
         {
@@ -178,11 +183,25 @@ public class Main : MonoBehaviour
             {
                 pos = OBJ_Pos,
                 rot = OBJ_Rot,
+                lastRot = 0,
                 containedRadius = 0.0f,
                 triStart = 0,
                 triEnd = NumTris - 1,
             };
         }
+
+        // Fill in relevant previous TriObjects data
+        if (NumTriObjects != 0)
+        {
+            TriObject[] LastTriObjects = new TriObject[NumTriObjects];
+            B_TriObjects.GetData(LastTriObjects);
+
+            for (int i = 0; i < TriObjects.Length; i++)
+            {
+                TriObjects[i].lastRot = LastTriObjects[i].lastRot;
+            }
+        }
+
         B_TriObjects ??= new ComputeBuffer(TriObjects.Length, Stride_TriObject);
         B_TriObjects.SetData(TriObjects);
     }
@@ -216,6 +235,8 @@ public class Main : MonoBehaviour
             SetTriObjectData();
             SetSceneObjects();
             shaderHelper.SetRMSettings(rmShader);
+
+            SettingsChanged = true;
         }
     }
 
@@ -281,7 +302,7 @@ public class Main : MonoBehaviour
         ComputeBuffer.CopyCount(AC_OccupiedChunks, CB_A, 0);
         int[] OC_lenArr = new int[1];
         CB_A.GetData(OC_lenArr);
-        int OC_len = Func.NextPow2(OC_lenArr[0]);
+        int OC_len = Func.NextPow2(OC_lenArr[0]); // NextPow2() since bitonic merge sort requires pow2 array length
 
         ssShader.SetInt("OC_len", OC_len);
 
@@ -319,12 +340,14 @@ public class Main : MonoBehaviour
 
     void RunPCShader()
     {
-        shaderHelper.DispatchKernel(pcShader, "CalcTriNormals", Tris.Length, pcShaderThreadSize);
+        shaderHelper.DispatchKernel(pcShader, "CalcTriNormals", NumTris, pcShaderThreadSize);
+        shaderHelper.DispatchKernel(pcShader, "SetLastRots", NumTriObjects, pcShaderThreadSize);
     }
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)
     {
-        RunPCShader();
+        // RunPCShader();
+        // if (SettingsChanged) { RunPCShader(); SettingsChanged = false; }
         RunSSShader();
         RunRMShader();
 

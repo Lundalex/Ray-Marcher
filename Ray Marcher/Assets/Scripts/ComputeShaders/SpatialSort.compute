@@ -32,6 +32,7 @@ struct TriObject
 {
     float3 pos;
     float3 rot;
+    float3 lastRot;
     float containedRadius;
     int triStart;
     int triEnd;
@@ -138,7 +139,7 @@ void CalcTriChunkKeys (uint3 id : SV_DispatchThreadID)
     Tri tri = Tris[i];
     float3 parentPos = TriObjects[tri.parentKey].pos;
 
-    ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
+    // ApplyTransformTriVertices(TriObjects[tri.parentKey].rot, tri.vA, tri.vB, tri.vC);
 
     // Calculate the chunk key for the triangle
     float3 minBounds = min(min(tri.vA, tri.vB), tri.vC);

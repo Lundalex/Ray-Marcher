@@ -34,6 +34,8 @@ public class ShaderHelper : MonoBehaviour
     {
         pcShader.SetBuffer(0, "TriObjects", m.B_TriObjects);
         pcShader.SetBuffer(0, "Tris", m.B_Tris);
+
+        pcShader.SetBuffer(1, "TriObjects", m.B_TriObjects);
     }
 
     public void SetSSShaderBuffers (ComputeShader ssShader)
@@ -90,6 +92,12 @@ public class ShaderHelper : MonoBehaviour
         rmShader.SetFloat("viewSpaceHeight", viewSpaceHeight);
 
         rmShader.SetFloat("focalPlaneFactor", m.focalPlaneFactor);
+    }
+
+    public void SetPCSettings (ComputeShader pcShader)
+    {
+        pcShader.SetInt("NumTris", m.NumTris);
+        pcShader.SetInt("NumTriObjects", m.NumTriObjects);
     }
 
     public void SetSSSettings (ComputeShader ssShader)
