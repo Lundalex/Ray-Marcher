@@ -97,4 +97,22 @@ namespace Resources
             return nextPow2;
         }
     }
+
+    public class Init
+    {
+        public static RenderTexture CreateTexture(int3 resolution)
+        {
+            RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.R16) // 0.0-1.0 with linear accuracy, single channel
+            {
+                dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
+                volumeDepth = resolution.z,
+                enableRandomWrite = true,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            texture.Create();
+
+            return texture;
+        }
+    }
 }

@@ -8,18 +8,18 @@ public class ShaderHelper : MonoBehaviour
     public Main m;
 
     // Method overloading - int / int2 / int3 threadsNum
-    public void DispatchKernel(ComputeShader cs, string kernelName, int threadsNum, int threadSize)
+    public void DispatchKernel (ComputeShader cs, string kernelName, int threadsNum, int threadSize)
     {
         int threadGroupNum = Utils.GetThreadGroupsNum(threadsNum, threadSize);
         cs.Dispatch(cs.FindKernel(kernelName), threadGroupNum, 1, 1);
     }
-    public void DispatchKernel(ComputeShader cs, string kernelName, int2 threadsNum, int threadSize)
+    public void DispatchKernel (ComputeShader cs, string kernelName, int2 threadsNum, int threadSize)
     {
         int2 threadGroupNums = Utils.GetThreadGroupsNumsXY(threadsNum, threadSize);
         cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, 1);
     }
 
-    public void DispatchKernel(ComputeShader cs, string kernelName, int3 threadsNum, int threadSize)
+    public void DispatchKernel (ComputeShader cs, string kernelName, int3 threadsNum, int threadSize)
     {
         int3 threadGroupNums = Utils.GetThreadGroupsNumsXYZ(threadsNum, threadSize);
         cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, threadGroupNums.z);
@@ -33,6 +33,8 @@ public class ShaderHelper : MonoBehaviour
         rmShader.SetBuffer(0, "Materials", m.B_Materials);
         rmShader.SetBuffer(0, "SpatialLookup", m.B_SpatialLookup);
         rmShader.SetBuffer(0, "StartIndices", m.B_StartIndices);
+
+        rmShader.SetTexture(0, "CloudDensityNoise", m.T_CloudDensityNoise);
     }
 
     public void SetPCShaderBuffers (ComputeShader pcShader)
@@ -61,10 +63,9 @@ public class ShaderHelper : MonoBehaviour
         ssShader.SetBuffer(4, "StartIndices", m.B_StartIndices);
     }
 
-    public void SetNGShaderBuffers(ComputeShader ngShader)
+    public void SetNGShaderBuffers (ComputeShader ngShader)
     {
-        // m.T_CloudDensityNoise = new Texture3D(m.NoiseResolution.x, m.NoiseResolution.y, m.NoiseResolution.z, TextureFormat.RFloat, false);
-        // ngShader.SetTexture(0, "CloudDensityNoise", m.T_CloudDensityNoise);
+        ngShader.SetTexture(0, "CloudDensityNoise", m.T_CloudDensityNoise);
     }
 
     public void SetRMSettings (ComputeShader rmShader)
@@ -129,6 +130,11 @@ public class ShaderHelper : MonoBehaviour
         ssShader.SetFloat("CellSize", m.CellSize);
     }
 
+    public void SetNGSettings (ComputeShader ngShader)
+    {
+        ngShader.SetVector("NoiseResolution", new Vector3(m.NoiseResolution.x, m.NoiseResolution.y, m.NoiseResolution.z));
+    }
+
     public void UpdateSortIterationVariables (ComputeShader ssShader, int blockLen, bool brownPinkSort)
     {
         ssShader.SetBool("BrownPinkSort", brownPinkSort);
@@ -149,5 +155,13 @@ public class ShaderHelper : MonoBehaviour
         // Camera orientation
         float3 cameraRot = transform.rotation.eulerAngles * Mathf.Deg2Rad;
         rmShader.SetVector("CameraRotation", new Vector3(cameraRot.x, cameraRot.y, cameraRot.z));
+    }
+
+    public void UpdateNGVariables (ComputeShader ngShader)
+    {
+        // Frame set variables
+        int FrameRand = UnityEngine.Random.Range(0, 999999);
+        ngShader.SetInt("FrameRand", FrameRand);
+        ngShader.SetInt("FrameCount", m.FrameCount++);
     }
 }

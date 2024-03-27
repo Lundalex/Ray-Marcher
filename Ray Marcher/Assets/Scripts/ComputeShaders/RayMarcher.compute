@@ -110,6 +110,8 @@ RWStructuredBuffer<int> StartIndices;
 // Shader output buffer
 RWTexture2D<float4> Result; // abc: rgb, d: opacity
 
+RWTexture3D<float> CloudDensityNoise;
+
 bool IsOutsideBounds(float3 point2)
 {
     if (MinWorldBounds.x > point2.x
@@ -320,4 +322,8 @@ void TraceRays (uint3 id : SV_DispatchThreadID)
 
     Result[id.xy] = float4(accumulatedCol.x, accumulatedCol.y, accumulatedCol.z, 0);
     // Result[id.xy] = float4(col.x, col.y, col.z, 0);
+
+    // Render CloudDensityNoise
+    float result = CloudDensityNoise[uint3(id.x, id.y, (uint)FrameRand % 2)];
+    Result[id.xy] = float4(result, 0, 0, 0);
 }

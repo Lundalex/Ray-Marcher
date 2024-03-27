@@ -4,10 +4,19 @@
 
 static const int ThreadsNum = 8;
 
+// Per frame
+const int FrameRand; // "random" value from 0 to 999999, gets reset each frame
+const int FrameCount; // Each frame: FrameCount++
+
+// Resolution
+const int3 NoiseResolution;
+
 RWTexture3D<float> CloudDensityNoise;
 
 [numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
 void kernel1 (uint3 id : SV_DispatchThreadID)
 {
-    CloudDensityNoise[id.xyz] = 1.0;
+    // Generate unique seed for each coordinate, even between frames
+    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + FrameCount * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
+    CloudDensityNoise[id.xyz] = randNormalized(stateRng);
 }

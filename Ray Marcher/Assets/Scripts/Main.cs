@@ -42,7 +42,7 @@ public class Main : MonoBehaviour
     public ComputeShader ssShader;
     public ComputeShader ngShader;
     [NonSerialized] public RenderTexture renderTexture;
-    [NonSerialized] public Texture3D T_CloudDensityNoise;
+    [NonSerialized] public RenderTexture T_CloudDensityNoise;
     public ShaderHelper shaderHelper;
     public Mesh testMesh;
 
@@ -114,10 +114,11 @@ public class Main : MonoBehaviour
 
         // NoiseGenerator
         shaderHelper.SetNGShaderBuffers(ngShader);
+        shaderHelper.SetNGSettings(ngShader);
 
         ProgramStarted = true;
     }
-
+    
     void LoadOBJ()
     {
         Vector3[] vertices = testMesh.vertices;
@@ -179,6 +180,8 @@ public class Main : MonoBehaviour
 
         AC_OccupiedChunks ??= new ComputeBuffer(Func.NextPow2(NumObjects * ChunksPerObject), sizeof(int) * 2, ComputeBufferType.Append);
         CB_A = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
+
+        T_CloudDensityNoise = Init.CreateTexture(NoiseResolution);
     }
 
     void SetTriObjectData()
@@ -217,6 +220,7 @@ public class Main : MonoBehaviour
     void Update()
     {
         shaderHelper.UpdateRMVariables(rmShader);
+        shaderHelper.UpdateNGVariables(ngShader);
     }
 
     void LateUpdate()
@@ -296,14 +300,6 @@ public class Main : MonoBehaviour
 
         shaderHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
     }
-
-    void RunNGShader()
-    {
-        // shaderHelper.DispatchKernel(ngShader, "kernel1", NoiseResolution, ngShaderThreadSize);
-        
-        // Color[] updatedColors = T_CloudDensityNoise.GetPixels();
-        // int a = 0;
-    }
     
     void RunSSShader()
     {
@@ -357,6 +353,11 @@ public class Main : MonoBehaviour
     {
         shaderHelper.DispatchKernel(pcShader, "CalcTriNormals", NumTris, pcShaderThreadSize);
         shaderHelper.DispatchKernel(pcShader, "SetLastRots", NumTriObjects, pcShaderThreadSize);
+    }
+
+    void RunNGShader()
+    {
+        shaderHelper.DispatchKernel(ngShader, "kernel1", NoiseResolution, ngShaderThreadSize);
     }
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)
