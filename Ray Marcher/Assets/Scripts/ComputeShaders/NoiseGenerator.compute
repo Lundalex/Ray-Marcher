@@ -1,0 +1,13 @@
+#pragma kernel kernel1 // 0
+
+#include "MathResourcesRT.hlsl"
+
+static const int ThreadsNum = 8;
+
+RWTexture3D<float> CloudDensityNoise;
+
+[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+void kernel1 (uint3 id : SV_DispatchThreadID)
+{
+    CloudDensityNoise[id.xyz] = 1.0;
+}

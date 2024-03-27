@@ -70,6 +70,14 @@ namespace Resources
             int threadGroupsNumY = GetThreadGroupsNum(threadsNum.y, threadSize);
             return new(threadGroupsNumX, threadGroupsNumY);
         }
+
+        public static int3 GetThreadGroupsNumsXYZ(int3 threadsNum, int threadSize)
+        {
+            int threadGroupsNumX = GetThreadGroupsNum(threadsNum.x, threadSize);
+            int threadGroupsNumY = GetThreadGroupsNum(threadsNum.y, threadSize);
+            int threadGroupsNumZ = GetThreadGroupsNum(threadsNum.z, threadSize);
+            return new(threadGroupsNumX, threadGroupsNumY, threadGroupsNumZ);
+        }
     }
 
     public class Func

@@ -3,12 +3,11 @@ using UnityEngine;
 
 // Import utils from Resources.cs
 using Resources;
-using System;
 public class ShaderHelper : MonoBehaviour
 {
     public Main m;
 
-    // Method overloading - int / int2 threadsNum
+    // Method overloading - int / int2 / int3 threadsNum
     public void DispatchKernel(ComputeShader cs, string kernelName, int threadsNum, int threadSize)
     {
         int threadGroupNum = Utils.GetThreadGroupsNum(threadsNum, threadSize);
@@ -18,6 +17,12 @@ public class ShaderHelper : MonoBehaviour
     {
         int2 threadGroupNums = Utils.GetThreadGroupsNumsXY(threadsNum, threadSize);
         cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, 1);
+    }
+
+    public void DispatchKernel(ComputeShader cs, string kernelName, int3 threadsNum, int threadSize)
+    {
+        int3 threadGroupNums = Utils.GetThreadGroupsNumsXYZ(threadsNum, threadSize);
+        cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, threadGroupNums.z);
     }
 
     public void SetRMShaderBuffers (ComputeShader rmShader)
@@ -54,6 +59,12 @@ public class ShaderHelper : MonoBehaviour
 
         ssShader.SetBuffer(4, "SpatialLookup", m.B_SpatialLookup);
         ssShader.SetBuffer(4, "StartIndices", m.B_StartIndices);
+    }
+
+    public void SetNGShaderBuffers(ComputeShader ngShader)
+    {
+        // m.T_CloudDensityNoise = new Texture3D(m.NoiseResolution.x, m.NoiseResolution.y, m.NoiseResolution.z, TextureFormat.RFloat, false);
+        // ngShader.SetTexture(0, "CloudDensityNoise", m.T_CloudDensityNoise);
     }
 
     public void SetRMSettings (ComputeShader rmShader)

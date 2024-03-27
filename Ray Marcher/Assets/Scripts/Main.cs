@@ -10,6 +10,7 @@ public class Main : MonoBehaviour
     [Header("Render settings")]
     public float fieldOfView;
     public int2 Resolution;
+    public int3 NoiseResolution;
 
     [Header("RM settings")]
     public int MaxStepCount;
@@ -39,7 +40,9 @@ public class Main : MonoBehaviour
     public ComputeShader rmShader;
     public ComputeShader pcShader;
     public ComputeShader ssShader;
+    public ComputeShader ngShader;
     [NonSerialized] public RenderTexture renderTexture;
+    [NonSerialized] public Texture3D T_CloudDensityNoise;
     public ShaderHelper shaderHelper;
     public Mesh testMesh;
 
@@ -47,6 +50,7 @@ public class Main : MonoBehaviour
     private int rmShaderThreadSize = 8; // /32
     private int pcShaderThreadSize = 512; // / 1024
     private int ssShaderThreadSize = 512; // / 1024
+    private int ngShaderThreadSize = 8; // /~10
     private int Stride_TriObject = sizeof(float) * 10 + sizeof(int) * 2;
     private int Stride_Tri = sizeof(float) * 12 + sizeof(int) * 2;
     private int Stride_Sphere = sizeof(float) * 4 + sizeof(int) * 1;
@@ -107,6 +111,9 @@ public class Main : MonoBehaviour
         // RayMarcher
         shaderHelper.UpdateRMVariables(rmShader);
         shaderHelper.SetRMSettings(rmShader);
+
+        // NoiseGenerator
+        shaderHelper.SetNGShaderBuffers(ngShader);
 
         ProgramStarted = true;
     }
@@ -290,6 +297,13 @@ public class Main : MonoBehaviour
         shaderHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
     }
 
+    void RunNGShader()
+    {
+        // shaderHelper.DispatchKernel(ngShader, "kernel1", NoiseResolution, ngShaderThreadSize);
+        
+        // Color[] updatedColors = T_CloudDensityNoise.GetPixels();
+        // int a = 0;
+    }
     
     void RunSSShader()
     {
@@ -348,9 +362,10 @@ public class Main : MonoBehaviour
     public void OnRenderImage(RenderTexture src, RenderTexture dest)
     {
         // Main program loop
-        if (SettingsChanged) { RunPCShader(); SettingsChanged = false; }
-        RunSSShader();
-        RunRMShader();
+        if (SettingsChanged) { RunPCShader(); SettingsChanged = false; } // PreCalc
+        RunSSShader(); // SpatialSort
+        RunRMShader(); // RayMarcher
+        RunNGShader(); // NoiseGenerator
 
         Graphics.Blit(renderTexture, dest);
     }
