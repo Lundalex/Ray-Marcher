@@ -351,10 +351,8 @@ void RenderNoiseTextures (uint3 id : SV_DispatchThreadID)
     if (scaledID.x < 2*NoiseResolution.x && scaledID.y < NoiseResolution.y)
     {
         Result[id.xy] = float4(result, result, result, 0);
+        return;
     }
     // Override ray marcher render?
-    // else
-    // {
-    //     Result[id.xy] = float4(0, 0, 0, 0);
-    // }
+    // Result[id.xy] = float4(0, 0, 0, 0);
 }
