@@ -120,6 +120,8 @@ public class Main : MonoBehaviour
         shaderHelper.SetNGShaderBuffers(ngShader);
         shaderHelper.SetNGSettings(ngShader);
 
+        RunNGShader(); // NoiseGenerator
+
         ProgramStarted = true;
     }
     
@@ -397,7 +399,7 @@ public class Main : MonoBehaviour
         if (SettingsChanged) { RunPCShader(); SettingsChanged = false; } // PreCalc
         RunSSShader(); // SpatialSort
         RunRMShader(); // RayMarcher
-        RunNGShader(); // NoiseGenerator
+        // RunNGShader() located in Start()
 
         Graphics.Blit(renderTexture, dest);
     }

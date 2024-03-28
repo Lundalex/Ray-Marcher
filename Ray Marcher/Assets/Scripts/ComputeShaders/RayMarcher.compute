@@ -336,7 +336,8 @@ void RenderNoiseTextures (uint3 id : SV_DispatchThreadID)
 {
     // Render PerlinNoise or VoronoiNoise
 
-    float pS = 1.6; // pixelSize
+    float pS = 1; // pixelSize
+    pS = max(pS, 1);
     uint zDepth = 128;
     uint2 scaledID = id.xy % pS + id.xy / pS;
 
@@ -351,8 +352,9 @@ void RenderNoiseTextures (uint3 id : SV_DispatchThreadID)
     {
         Result[id.xy] = float4(result, 0, 0, 0);
     }
-    else
-    {
-        Result[id.xy] = float4(0, 0, 0, 0);
-    }
+    // Override ray marcher render?
+    // else
+    // {
+    //     Result[id.xy] = float4(0, 0, 0, 0);
+    // }
 }
