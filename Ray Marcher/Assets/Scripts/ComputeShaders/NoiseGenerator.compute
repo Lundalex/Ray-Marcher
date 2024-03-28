@@ -1,22 +1,153 @@
-#pragma kernel kernel1 // 0
+// PERLIN
+#pragma kernel GenerateVectorMap // 0
+#pragma kernel Perlin // 1
+
+// VORONOI
+#pragma kernel GeneratePointsMap // 2
+#pragma kernel Voronoi // 3
 
 #include "MathResourcesRT.hlsl"
 
-static const int ThreadsNum = 8;
+static const uint ThreadsNum = 8;
 
+static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
+
+const uint MaxNoiseCellSize;
+const uint NoiseCellSize;
+const uint NumPasses;
+const uint PassCount;
+ 
 // Per frame
-const int FrameRand; // "random" value from 0 to 999999, gets reset each frame
-const int FrameCount; // Each frame: FrameCount++
+const uint FrameRand; // "random" value from 0 to 999999, gets reset each frame
+const uint FrameCount; // Each frame: FrameCount++
 
 // Resolution
 const int3 NoiseResolution;
 
-RWTexture3D<float> CloudDensityNoise;
+RWTexture3D<float3> VectorMap;
+RWTexture3D<float> PerlinNoise;
+
+RWTexture3D<float3> PointsMap;
+RWTexture3D<float> VoronoiNoise;
 
 [numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
-void kernel1 (uint3 id : SV_DispatchThreadID)
+void GenerateVectorMap (uint3 id : SV_DispatchThreadID)
 {
-    // Generate unique seed for each coordinate, even between frames
-    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + FrameCount * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
-    CloudDensityNoise[id.xyz] = randNormalized(stateRng);
+    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + PassCount * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
+
+    VectorMap[id] = (randPointOnUnitSphere(stateRng) + 1) * 0.5;
+}
+
+float trilinearLerp(float v_F_F_F, float v_C_F_F, float v_F_C_F, float v_C_C_F, float v_F_F_C, float v_C_F_C, float v_F_C_C, float v_C_C_C, float3 frac)
+{
+    float result;
+
+    // Interpolate along x-axis
+    float interpX0 = lerp(v_F_F_F, v_C_F_F, frac.x);
+    float interpX1 = lerp(v_F_C_F, v_C_C_F, frac.x);
+    float interpX2 = lerp(v_F_F_C, v_C_F_C, frac.x);
+    float interpX3 = lerp(v_F_C_C, v_C_C_C, frac.x);
+
+    // Interpolate along y-axis
+    float interpY0 = lerp(interpX0, interpX1, frac.y);
+    float interpY1 = lerp(interpX2, interpX3, frac.y);
+
+    // Interpolate along z-axis
+    result = lerp(interpY0, interpY1, frac.z);
+
+    return result;
+}
+
+[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+void Perlin (uint3 id : SV_DispatchThreadID)
+{
+    uint3 num = NoiseResolution / (MaxNoiseCellSize * pow(2, PassCount));
+
+    float3 cell = float3(id) / (MaxNoiseCellSize * pow(2, PassCount));
+    uint3 floorCell = floor(cell);
+    uint3 ceilCell = ceil(cell) % num;
+    float3 frac = cell - floorCell;
+
+    //       x,y,z
+    float3 v_F_F_F = VectorMap[floorCell] * 2 - 1;
+    float3 v_C_F_F = VectorMap[uint3(ceilCell.x, floorCell.y, floorCell.z)] * 2 - 1;
+    float3 v_F_C_F = VectorMap[uint3(floorCell.x, ceilCell.y, floorCell.z)] * 2 - 1;
+    float3 v_C_C_F = VectorMap[uint3(ceilCell.x, ceilCell.y, floorCell.z)] * 2 - 1;
+    float3 v_F_F_C = VectorMap[uint3(floorCell.x, floorCell.y, ceilCell.z)] * 2 - 1;
+    float3 v_C_F_C = VectorMap[uint3(ceilCell.x, floorCell.y, ceilCell.z)] * 2 - 1;
+    float3 v_F_C_C = VectorMap[uint3(floorCell.x, ceilCell.y, ceilCell.z)] * 2 - 1;
+    float3 v_C_C_C = VectorMap[ceilCell] * 2 - 1;
+
+    float d1 = dot(v_F_F_F, cell - float3(ceilCell.x, floorCell.y, floorCell.z));
+
+    float d_F_F_F = dot(v_F_F_F, frac - float3(0.0, 0.0, 0.0));
+    float d_C_F_F = dot(v_C_F_F, frac - float3(1.0, 0.0, 0.0));
+    float d_F_C_F = dot(v_F_C_F, frac - float3(0.0, 1.0, 0.0));
+    float d_C_C_F = dot(v_C_C_F, frac - float3(1.0, 1.0, 0.0));
+    float d_F_F_C = dot(v_F_F_C, frac - float3(0.0, 0.0, 1.0));
+    float d_C_F_C = dot(v_C_F_C, frac - float3(1.0, 0.0, 1.0));
+    float d_F_C_C = dot(v_F_C_C, frac - float3(0.0, 1.0, 1.0));
+    float d_C_C_C = dot(v_C_C_C, frac - float3(1.0, 1.0, 1.0));
+
+    float perlinResult = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac);
+
+    // Very bad vidual artifacts
+    // float output = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac)*.5 + .25;
+
+    // Also generates visual artifacts, but less
+    float output;
+    if (perlinResult < -0.4) { output = 0.1; }
+    else if (perlinResult < -0.3) { output = 0.2; }
+    else if (perlinResult < -0.2) { output = 0.3; }
+    else if (perlinResult < -0.1) { output = 0.4; }
+    else if (perlinResult < 0) { output = 0.5; }
+    else if (perlinResult < 0.1) { output = 0.6; }
+    else if (perlinResult < 0.2) { output = 0.7; }
+    else if (perlinResult < 0.3) { output = 0.8; } 
+    else if (perlinResult < 0.4) { output = 0.9; }
+    else if (perlinResult <= 0.6) { output = 1.0; }
+
+    if (MaxNoiseCellSize == NoiseCellSize)
+    {
+        PerlinNoise[id] = 0;
+    }
+    PerlinNoise[id] += output * (1/pow(2, PassCount+1)); // I: low PassCount would mean less vibrant colors!
+    // PerlinNoise[id] += output / NumPasses * 0.5;
+}
+
+[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+void GeneratePointsMap (uint3 id : SV_DispatchThreadID)
+{
+    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y;
+
+    float3 offset = randPointOnUnitSphere(stateRng) * .5; // -0.5 < offset > 0.5, for all components
+    float3 pos = offset + .5; // Center in cell
+
+    PointsMap[id] = pos;
+}
+
+[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+void Voronoi (uint3 id : SV_DispatchThreadID)
+{
+    uint3 num = floor(NoiseResolution / MaxNoiseCellSize);
+    float minDstSqr = FLT_MAX; // Decreasing this value will leave patches of white (> .0)
+
+    float3 cellPos = (float3(id) % MaxNoiseCellSize) / MaxNoiseCellSize;
+
+    uint3 indexBase3 = floor(id / MaxNoiseCellSize);
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int y = -1; y <= 1; y++)
+        {
+            for (int z = -1; z <= 1; z++)
+            {
+                uint3 index3 = (indexBase3 + uint3(x, y, z)) % num;
+                float dstSqr = dot2((PointsMap[index3] + float3(x, y, z)) - cellPos);
+                minDstSqr = min(minDstSqr, dstSqr);
+            }
+        }
+    }
+
+    float minDst = sqrt(minDstSqr);
+    VoronoiNoise[id] = minDst * .7; // T: *.7
 }

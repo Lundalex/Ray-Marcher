@@ -100,19 +100,52 @@ namespace Resources
 
     public class Init
     {
-        public static RenderTexture CreateTexture(int3 resolution)
+        public static RenderTexture CreateTexture(int3 resolution, int dims)
         {
-            RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.R16) // 0.0-1.0 with linear accuracy, single channel
+            if (dims == 1)
             {
-                dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
-                volumeDepth = resolution.z,
-                enableRandomWrite = true,
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-            texture.Create();
+                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.R16) // 0.0-1.0 with linear accuracy, single channel
+                {
+                    dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
+                    volumeDepth = resolution.z,
+                    enableRandomWrite = true,
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear
+                };
+                texture.Create();
 
-            return texture;
+                return texture;
+            }
+
+            else if (dims == 2)
+            {
+                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGFloat)
+                {
+                    dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
+                    volumeDepth = resolution.z,
+                    enableRandomWrite = true,
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear
+                };
+                texture.Create();
+
+                return texture;
+            }
+
+            else // dims == 3
+            {
+                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGB111110Float)
+                {
+                    dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
+                    volumeDepth = resolution.z,
+                    enableRandomWrite = true,
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear
+                };
+                texture.Create();
+
+                return texture;
+            }
         }
     }
 }

@@ -1,4 +1,7 @@
+// Ray marching
 #pragma kernel TraceRays // 0
+// Render noise textures
+#pragma kernel RenderNoiseTextures // 1
 
 #include "MathResourcesRT.hlsl"
 
@@ -8,12 +11,12 @@ static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
 const float MaxStepSize;
 
 // Num constants
-const int4 NumChunks; // x, y, z, x*y
-const int NumTriObjects;
-const int NumTris;
-const int NumSpheres;
-const int NumObjects; // NumSpheres + NumTris
-const int NumMaterials;
+const uint4 NumChunks; // x, y, z, x*y
+const uint NumTriObjects;
+const uint NumTris;
+const uint NumSpheres;
+const uint NumObjects; // NumSpheres + NumTris
+const uint NumMaterials;
 
 // Ray setup settings
 const int MaxStepCount;
@@ -31,18 +34,21 @@ const float3 MaxWorldBounds;
 const float3 ChunkGridOffset;
 
 // View settings
-const int2 Resolution;
+const uint2 Resolution;
 const float viewSpaceWidth;
 const float viewSpaceHeight;
 const float focalPlaneFactor;
+
+// Noise settings
+const uint2 NoiseResolution;
 
 // Camera orientation
 const float3 WorldSpaceCameraPos;
 const float3 CameraRotation;
 
 // Per frame
-const int FrameRand; // "random" value from 0 to 999999, gets reset each frame
-const int FrameCount; // Each frame: FrameCount++
+const uint FrameRand; // "random" value from 0 to 999999, gets reset each frame
+const uint FrameCount; // Each frame: FrameCount++
 
 // Shader specific structs
 struct Ray
@@ -110,7 +116,8 @@ RWStructuredBuffer<int> StartIndices;
 // Shader output buffer
 RWTexture2D<float4> Result; // abc: rgb, d: opacity
 
-RWTexture3D<float> CloudDensityNoise;
+RWTexture3D<float> PerlinNoise;
+RWTexture3D<float> VoronoiNoise;
 
 bool IsOutsideBounds(float3 point2)
 {
@@ -185,7 +192,7 @@ StepInfo Step (Ray ray, inout int rngState)
     int Index = startIndex;
     while (Index != -1 && chunkKey == SpatialLookup[Index].y)
     {
-        int objectIndex = SpatialLookup[Index].x;
+        uint objectIndex = SpatialLookup[Index].x;
 
         if (objectIndex < NumSpheres)
         {
@@ -322,8 +329,30 @@ void TraceRays (uint3 id : SV_DispatchThreadID)
 
     Result[id.xy] = float4(accumulatedCol.x, accumulatedCol.y, accumulatedCol.z, 0);
     // Result[id.xy] = float4(col.x, col.y, col.z, 0);
+}
 
-    // Render CloudDensityNoise
-    float result = CloudDensityNoise[uint3(id.x, id.y, (uint)FrameRand % 2)];
-    Result[id.xy] = float4(result, 0, 0, 0);
+[numthreads(ThreadsNum,ThreadsNum,1)]
+void RenderNoiseTextures (uint3 id : SV_DispatchThreadID)
+{
+    // Render PerlinNoise or VoronoiNoise
+
+    float pS = 1.6; // pixelSize
+    uint zDepth = 128;
+    uint2 scaledID = id.xy % pS + id.xy / pS;
+
+    uint2 idW = scaledID % NoiseResolution;
+
+    float result;
+    result = scaledID.x > NoiseResolution.x
+    ? VoronoiNoise[uint3(idW.x % pS + idW.x / pS, idW.y % pS + idW.y / pS, (uint)FrameCount % zDepth)]
+    : PerlinNoise[uint3(idW.x % pS + idW.x / pS, idW.y % pS + idW.y / pS, (uint)FrameCount % zDepth)];
+
+    if (scaledID.x < 2*NoiseResolution.x && scaledID.y < NoiseResolution.y)
+    {
+        Result[id.xy] = float4(result, 0, 0, 0);
+    }
+    else
+    {
+        Result[id.xy] = float4(0, 0, 0, 0);
+    }
 }

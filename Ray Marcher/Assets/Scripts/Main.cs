@@ -11,6 +11,7 @@ public class Main : MonoBehaviour
     public float fieldOfView;
     public int2 Resolution;
     public int3 NoiseResolution;
+    public int NoiseCellSize;
 
     [Header("RM settings")]
     public int MaxStepCount;
@@ -41,8 +42,11 @@ public class Main : MonoBehaviour
     public ComputeShader pcShader;
     public ComputeShader ssShader;
     public ComputeShader ngShader;
-    [NonSerialized] public RenderTexture renderTexture;
-    [NonSerialized] public RenderTexture T_CloudDensityNoise;
+    [NonSerialized] public RenderTexture renderTexture; // Texture drawn to screen
+    [NonSerialized] public RenderTexture T_VectorMap;
+    [NonSerialized] public RenderTexture T_PerlinNoise;
+    [NonSerialized] public RenderTexture T_PointsMap;
+    [NonSerialized] public RenderTexture T_VoronoiNoise;
     public ShaderHelper shaderHelper;
     public Mesh testMesh;
 
@@ -181,7 +185,11 @@ public class Main : MonoBehaviour
         AC_OccupiedChunks ??= new ComputeBuffer(Func.NextPow2(NumObjects * ChunksPerObject), sizeof(int) * 2, ComputeBufferType.Append);
         CB_A = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
 
-        T_CloudDensityNoise = Init.CreateTexture(NoiseResolution);
+        T_VectorMap = Init.CreateTexture(NoiseResolution / NoiseCellSize, 3);
+        T_PerlinNoise = Init.CreateTexture(NoiseResolution, 1);
+
+        T_PointsMap = Init.CreateTexture(NoiseResolution / NoiseCellSize, 3);
+        T_VoronoiNoise = Init.CreateTexture(NoiseResolution, 1);
     }
 
     void SetTriObjectData()
@@ -296,9 +304,12 @@ public class Main : MonoBehaviour
 
             // Set texture in shader
             rmShader.SetTexture(0, "Result", renderTexture);
+            rmShader.SetTexture(1, "Result", renderTexture);
         }
 
         shaderHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
+
+        shaderHelper.DispatchKernel(rmShader, "RenderNoiseTextures", Resolution, rmShaderThreadSize);
     }
     
     void RunSSShader()
@@ -357,7 +368,27 @@ public class Main : MonoBehaviour
 
     void RunNGShader()
     {
-        shaderHelper.DispatchKernel(ngShader, "kernel1", NoiseResolution, ngShaderThreadSize);
+        // PERLIN_3D -> PerlinNoise
+        int MaxNoiseCellSize = NoiseCellSize;
+        int NumPasses = (int)Mathf.Log(MaxNoiseCellSize, 2);
+
+        ngShader.SetInt("NumPasses", NumPasses);
+        ngShader.SetInt("MaxNoiseCellSize", MaxNoiseCellSize);
+
+        int NoiseCellSize2 = MaxNoiseCellSize*2;
+        for (int pass = 0; pass < NumPasses; pass++)
+        {
+            NoiseCellSize2 /= 2;
+            ngShader.SetInt("NoiseCellSize", NoiseCellSize2);
+            ngShader.SetInt("PassCount", pass);
+
+            shaderHelper.DispatchKernel(ngShader, "GenerateVectorMap", NoiseResolution / NoiseCellSize2, ngShaderThreadSize);
+            shaderHelper.DispatchKernel(ngShader, "Perlin", NoiseResolution, ngShaderThreadSize);
+        }
+
+        // VORONOI_3D -> VoronoiNoise
+        shaderHelper.DispatchKernel(ngShader, "GeneratePointsMap", NoiseResolution / NoiseCellSize, ngShaderThreadSize);
+        shaderHelper.DispatchKernel(ngShader, "Voronoi", NoiseResolution, ngShaderThreadSize);
     }
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)

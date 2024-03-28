@@ -34,7 +34,8 @@ public class ShaderHelper : MonoBehaviour
         rmShader.SetBuffer(0, "SpatialLookup", m.B_SpatialLookup);
         rmShader.SetBuffer(0, "StartIndices", m.B_StartIndices);
 
-        rmShader.SetTexture(0, "CloudDensityNoise", m.T_CloudDensityNoise);
+        rmShader.SetTexture(1, "PerlinNoise", m.T_PerlinNoise);
+        rmShader.SetTexture(1, "VoronoiNoise", m.T_VoronoiNoise);
     }
 
     public void SetPCShaderBuffers (ComputeShader pcShader)
@@ -65,7 +66,15 @@ public class ShaderHelper : MonoBehaviour
 
     public void SetNGShaderBuffers (ComputeShader ngShader)
     {
-        ngShader.SetTexture(0, "CloudDensityNoise", m.T_CloudDensityNoise);
+        ngShader.SetTexture(0, "VectorMap", m.T_VectorMap);
+
+        ngShader.SetTexture(1, "VectorMap", m.T_VectorMap);
+        ngShader.SetTexture(1, "PerlinNoise", m.T_PerlinNoise);
+
+        ngShader.SetTexture(2, "PointsMap", m.T_PointsMap);
+
+        ngShader.SetTexture(3, "PointsMap", m.T_PointsMap);
+        ngShader.SetTexture(3, "VoronoiNoise", m.T_VoronoiNoise);
     }
 
     public void SetRMSettings (ComputeShader rmShader)
@@ -82,11 +91,13 @@ public class ShaderHelper : MonoBehaviour
         rmShader.SetInt("NumMaterials", m.Materials.Length);
 
         rmShader.SetVector("Resolution", new Vector2(m.Resolution.x, m.Resolution.y));
-
         rmShader.SetVector("MinWorldBounds", new Vector3(m.MinWorldBounds.x, m.MinWorldBounds.y, m.MinWorldBounds.z));
         rmShader.SetVector("MaxWorldBounds", new Vector3(m.MaxWorldBounds.x, m.MaxWorldBounds.y, m.MaxWorldBounds.z));
         rmShader.SetVector("ChunkGridOffset", new Vector3(m.ChunkGridOffset.x, m.ChunkGridOffset.y, m.ChunkGridOffset.z));
         rmShader.SetFloat("CellSize", m.CellSize);
+
+        // Noise settings
+        rmShader.SetVector("NoiseResolution", new Vector3(m.NoiseResolution.x, m.NoiseResolution.y, m.NoiseResolution.z));
 
         // Ray setup settings
         rmShader.SetInt("MaxStepCount", m.MaxStepCount);
@@ -132,6 +143,7 @@ public class ShaderHelper : MonoBehaviour
 
     public void SetNGSettings (ComputeShader ngShader)
     {
+        // ngShader.SetInt("NoiseCellSize", m.NoiseCellSize);
         ngShader.SetVector("NoiseResolution", new Vector3(m.NoiseResolution.x, m.NoiseResolution.y, m.NoiseResolution.z));
     }
 

@@ -234,9 +234,10 @@ MonoBehaviour:
     x: 1920
     y: 1080
   NoiseResolution:
-    x: 1920
-    y: 1080
-    z: 2
+    x: 512
+    y: 512
+    z: 128
+  NoiseCellSize: 16
   MaxStepCount: 60
   RaysPerPixel: 1
   HitThreshold: 0.01
