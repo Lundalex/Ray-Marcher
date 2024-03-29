@@ -100,9 +100,10 @@ namespace Resources
 
     public class Init
     {
-        public static RenderTexture CreateTexture(int3 resolution, int dims)
+        // Method overloading (int2 / int3) resolution for 2D and 3D textures
+        public static RenderTexture CreateTexture(int3 resolution, int channels)
         {
-            if (dims == 1)
+            if (channels == 1)
             {
                 RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.R16) // 0.0-1.0 with linear accuracy, single channel
                 {
@@ -117,7 +118,7 @@ namespace Resources
                 return texture;
             }
 
-            else if (dims == 2)
+            else if (channels == 2)
             {
                 RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGFloat)
                 {
@@ -132,7 +133,7 @@ namespace Resources
                 return texture;
             }
 
-            else // dims == 3
+            else // channels == 3
             {
                 RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGB111110Float)
                 {
@@ -144,6 +145,45 @@ namespace Resources
                 };
                 texture.Create();
 
+                return texture;
+            }
+        }
+        public static RenderTexture CreateTexture(int2 resolution, int channels)
+        {
+            if (channels == 1)
+            {
+                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.R16)
+                {
+                    dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
+                    enableRandomWrite = true,
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear
+                };
+                texture.Create();
+                return texture;
+            }
+            else if (channels == 2)
+            {
+                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGFloat)
+                {
+                    dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
+                    enableRandomWrite = true,
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear
+                };
+                texture.Create();
+                return texture;
+            }
+            else // channels == 3
+            {
+                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGB111110Float)
+                {
+                    dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
+                    enableRandomWrite = true,
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear
+                };
+                texture.Create();
                 return texture;
             }
         }

@@ -17,9 +17,8 @@ const uint NoiseCellSize;
 const uint NumPasses;
 const uint PassCount;
  
-// Per frame
-const uint FrameRand; // "random" value from 0 to 999999, gets reset each frame
-const uint FrameCount; // Each frame: FrameCount++
+// Rand
+const int RngSeed;
 
 // Resolution
 const int3 NoiseResolution;
@@ -33,7 +32,7 @@ RWTexture3D<float> VoronoiNoise;
 [numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
 void GenerateVectorMap (uint3 id : SV_DispatchThreadID)
 {
-    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + PassCount * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
+    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + (RngSeed + PassCount) * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
 
     VectorMap[id] = (randPointOnUnitSphere(stateRng) + 1) * 0.5;
 }
@@ -67,6 +66,7 @@ void Perlin (uint3 id : SV_DispatchThreadID)
     uint3 floorCell = floor(cell);
     uint3 ceilCell = ceil(cell) % num;
     float3 frac = cell - floorCell;
+    // if (-1 > frac.x || 1 < frac.x || -1 > frac.y || 1 < frac.y || -1 > frac.z || 1 < frac.z) { return; }
 
     //       x,y,z
     float3 v_F_F_F = VectorMap[floorCell] * 2 - 1;
@@ -77,8 +77,6 @@ void Perlin (uint3 id : SV_DispatchThreadID)
     float3 v_C_F_C = VectorMap[uint3(ceilCell.x, floorCell.y, ceilCell.z)] * 2 - 1;
     float3 v_F_C_C = VectorMap[uint3(floorCell.x, ceilCell.y, ceilCell.z)] * 2 - 1;
     float3 v_C_C_C = VectorMap[ceilCell] * 2 - 1;
-
-    float d1 = dot(v_F_F_F, cell - float3(ceilCell.x, floorCell.y, floorCell.z));
 
     float d_F_F_F = dot(v_F_F_F, frac - float3(0.0, 0.0, 0.0));
     float d_C_F_F = dot(v_C_F_F, frac - float3(1.0, 0.0, 0.0));
@@ -92,7 +90,7 @@ void Perlin (uint3 id : SV_DispatchThreadID)
     float perlinResult = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac);
 
     // Very bad vidual artifacts
-    // float output = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac)*.5 + .25;
+    // float output = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac) *.5 + .5;
 
     // Also generates visual artifacts, but less
     float output;
@@ -118,7 +116,7 @@ void Perlin (uint3 id : SV_DispatchThreadID)
 [numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
 void GeneratePointsMap (uint3 id : SV_DispatchThreadID)
 {
-    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y;
+    uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + 2 * RngSeed * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
 
     float3 offset = randPointOnUnitSphere(stateRng) * .5; // -0.5 < offset > 0.5, for all components
     float3 pos = offset + .5; // Center in cell
@@ -149,5 +147,5 @@ void Voronoi (uint3 id : SV_DispatchThreadID)
     }
 
     float minDst = sqrt(minDstSqr);
-    VoronoiNoise[id] = minDst * .7; // T: *.7
+    VoronoiNoise[id] = minDst;
 }

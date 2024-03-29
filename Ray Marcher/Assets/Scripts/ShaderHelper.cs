@@ -6,6 +6,7 @@ using Resources;
 public class ShaderHelper : MonoBehaviour
 {
     public Main m;
+    public TextureHelper th;
 
     // Method overloading - int / int2 / int3 threadsNum
     public void DispatchKernel (ComputeShader cs, string kernelName, int threadsNum, int threadSize)
@@ -34,8 +35,9 @@ public class ShaderHelper : MonoBehaviour
         rmShader.SetBuffer(0, "SpatialLookup", m.B_SpatialLookup);
         rmShader.SetBuffer(0, "StartIndices", m.B_StartIndices);
 
-        rmShader.SetTexture(1, "PerlinNoise", m.T_PerlinNoise);
-        rmShader.SetTexture(1, "VoronoiNoise", m.T_VoronoiNoise);
+        rmShader.SetTexture(0, "Result", m.renderTexture);
+
+        rmShader.SetTexture(1, "Result", m.renderTexture);
     }
 
     public void SetPCShaderBuffers (ComputeShader pcShader)
@@ -64,17 +66,15 @@ public class ShaderHelper : MonoBehaviour
         ssShader.SetBuffer(4, "StartIndices", m.B_StartIndices);
     }
 
-    public void SetNGShaderBuffers (ComputeShader ngShader)
+    public void SetNGShaderTextures (ComputeShader ngShader)
     {
-        ngShader.SetTexture(0, "VectorMap", m.T_VectorMap);
+        ngShader.SetTexture(0, "VectorMap", th.T_VectorMap);
 
-        ngShader.SetTexture(1, "VectorMap", m.T_VectorMap);
-        ngShader.SetTexture(1, "PerlinNoise", m.T_PerlinNoise);
+        ngShader.SetTexture(1, "VectorMap", th.T_VectorMap);
 
-        ngShader.SetTexture(2, "PointsMap", m.T_PointsMap);
+        ngShader.SetTexture(2, "PointsMap", th.T_PointsMap);
 
-        ngShader.SetTexture(3, "PointsMap", m.T_PointsMap);
-        ngShader.SetTexture(3, "VoronoiNoise", m.T_VoronoiNoise);
+        ngShader.SetTexture(3, "PointsMap", th.T_PointsMap);
     }
 
     public void SetRMSettings (ComputeShader rmShader)
@@ -98,6 +98,7 @@ public class ShaderHelper : MonoBehaviour
 
         // Noise settings
         rmShader.SetVector("NoiseResolution", new Vector3(m.NoiseResolution.x, m.NoiseResolution.y, m.NoiseResolution.z));
+        rmShader.SetFloat("NoisePixelSize", m.NoisePixelSize);
 
         // Ray setup settings
         rmShader.SetInt("MaxStepCount", m.MaxStepCount);
@@ -156,8 +157,8 @@ public class ShaderHelper : MonoBehaviour
     public void UpdateRMVariables (ComputeShader rmShader)
     {
         // Frame set variables
-        int FrameRand = UnityEngine.Random.Range(0, 999999);
-        rmShader.SetInt("FrameRand", FrameRand);
+        m.FrameRand = UnityEngine.Random.Range(0, 999999);
+        rmShader.SetInt("FrameRand", m.FrameRand);
         rmShader.SetInt("FrameCount", m.FrameCount++);
 
         // Camera position

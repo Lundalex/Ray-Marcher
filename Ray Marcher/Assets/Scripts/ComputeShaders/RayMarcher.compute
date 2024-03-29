@@ -40,7 +40,8 @@ const float viewSpaceHeight;
 const float focalPlaneFactor;
 
 // Noise settings
-const uint2 NoiseResolution;
+const uint3 NoiseResolution;
+const float NoisePixelSize;
 
 // Camera orientation
 const float3 WorldSpaceCameraPos;
@@ -336,17 +337,16 @@ void RenderNoiseTextures (uint3 id : SV_DispatchThreadID)
 {
     // Render PerlinNoise or VoronoiNoise
 
-    float pS = 1; // pixelSize
+    float pS = NoisePixelSize; // pixelSize
     pS = max(pS, 1);
-    uint zDepth = 128;
     uint2 scaledID = id.xy % pS + id.xy / pS;
 
-    uint2 idW = scaledID % NoiseResolution;
+    uint2 idW = scaledID % NoiseResolution.xy;
 
     float result;
     result = scaledID.x > NoiseResolution.x
-    ? VoronoiNoise[uint3(idW.x % pS + idW.x / pS, idW.y % pS + idW.y / pS, (uint)FrameCount % zDepth)]
-    : PerlinNoise[uint3(idW.x % pS + idW.x / pS, idW.y % pS + idW.y / pS, (uint)FrameCount % zDepth)];
+    ? VoronoiNoise[uint3(idW.x % pS + idW.x / pS, idW.y % pS + idW.y / pS, (uint)FrameCount % NoiseResolution.z)]
+    : PerlinNoise[uint3(idW.x % pS + idW.x / pS, idW.y % pS + idW.y / pS, (uint)FrameCount % NoiseResolution.z)];
 
     if (scaledID.x < 2*NoiseResolution.x && scaledID.y < NoiseResolution.y)
     {

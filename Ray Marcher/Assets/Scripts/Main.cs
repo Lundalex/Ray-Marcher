@@ -4,14 +4,13 @@ using System;
 
 // Import utils from Resources.cs
 using Resources;
+using System.Security.Cryptography;
 
 public class Main : MonoBehaviour
 {
     [Header("Render settings")]
     public float fieldOfView;
     public int2 Resolution;
-    public int3 NoiseResolution;
-    public int NoiseCellSize;
 
     [Header("RM settings")]
     public int MaxStepCount;
@@ -36,25 +35,27 @@ public class Main : MonoBehaviour
     public float4[] SpheresInput; // xyz: pos; w: radii
     public float4[] MatTypesInput1; // xyz: emissionColor; w: emissionStrength
     public float4[] MatTypesInput2; // x: smoothness
-
+    [Header("Noise settings")]
+    public int3 NoiseResolution;
+    public int NoiseCellSize;
+    public float LerpFactor;
+    public float NoisePixelSize;
+    public bool RenderNoiseTextures;
     [Header("References")]
     public ComputeShader rmShader;
     public ComputeShader pcShader;
     public ComputeShader ssShader;
     public ComputeShader ngShader;
     [NonSerialized] public RenderTexture renderTexture; // Texture drawn to screen
-    [NonSerialized] public RenderTexture T_VectorMap;
-    [NonSerialized] public RenderTexture T_PerlinNoise;
-    [NonSerialized] public RenderTexture T_PointsMap;
-    [NonSerialized] public RenderTexture T_VoronoiNoise;
+    [NonSerialized] public RenderTexture TextureBlendTest; // Composite noise texture test
     public ShaderHelper shaderHelper;
+    public TextureHelper textureHelper;
     public Mesh testMesh;
 
     // Shader settings
     private int rmShaderThreadSize = 8; // /32
     private int pcShaderThreadSize = 512; // / 1024
     private int ssShaderThreadSize = 512; // / 1024
-    private int ngShaderThreadSize = 8; // /~10
     private int Stride_TriObject = sizeof(float) * 10 + sizeof(int) * 2;
     private int Stride_Tri = sizeof(float) * 12 + sizeof(int) * 2;
     private int Stride_Sphere = sizeof(float) * 4 + sizeof(int) * 1;
@@ -79,6 +80,7 @@ public class Main : MonoBehaviour
     public ComputeBuffer CB_A;
     private bool ProgramStarted = false;
     private bool SettingsChanged = true;
+    [NonSerialized] public int FrameRand = 0;
     private Vector3 lastCameraPosition;
     private Quaternion lastCameraRotation;
 
@@ -98,6 +100,8 @@ public class Main : MonoBehaviour
         FrameCount = 0;
         lastCameraPosition = transform.position;
 
+        textureHelper.UpdateScriptTextures(NoiseResolution, NoiseCellSize);
+
         SetSceneObjects();
         LoadOBJ();
 
@@ -112,15 +116,15 @@ public class Main : MonoBehaviour
         shaderHelper.SetSSSettings(ssShader);
         shaderHelper.SetPCSettings(pcShader);
 
+        // NoiseGenerator
+        shaderHelper.SetNGShaderTextures(ngShader);
+        shaderHelper.SetNGSettings(ngShader);
+
+        InitNoiseTextures();
+
         // RayMarcher
         shaderHelper.UpdateRMVariables(rmShader);
         shaderHelper.SetRMSettings(rmShader);
-
-        // NoiseGenerator
-        shaderHelper.SetNGShaderBuffers(ngShader);
-        shaderHelper.SetNGSettings(ngShader);
-
-        RunNGShader(); // NoiseGenerator
 
         ProgramStarted = true;
     }
@@ -187,11 +191,7 @@ public class Main : MonoBehaviour
         AC_OccupiedChunks ??= new ComputeBuffer(Func.NextPow2(NumObjects * ChunksPerObject), sizeof(int) * 2, ComputeBufferType.Append);
         CB_A = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
 
-        T_VectorMap = Init.CreateTexture(NoiseResolution / NoiseCellSize, 3);
-        T_PerlinNoise = Init.CreateTexture(NoiseResolution, 1);
-
-        T_PointsMap = Init.CreateTexture(NoiseResolution / NoiseCellSize, 3);
-        T_VoronoiNoise = Init.CreateTexture(NoiseResolution, 1);
+        renderTexture = Init.CreateTexture(Resolution, 3);
     }
 
     void SetTriObjectData()
@@ -254,6 +254,8 @@ public class Main : MonoBehaviour
         {
             FrameCount = 0;
 
+            InitNoiseTextures(); // Only needs to be updated when inspector settings have changed
+
             SetTriObjectData();
             SetSceneObjects();
             shaderHelper.SetRMSettings(rmShader);
@@ -296,22 +298,9 @@ public class Main : MonoBehaviour
 
     void RunRMShader()
     {
-        if (renderTexture == null)
-        {
-            renderTexture = new RenderTexture(Resolution.x, Resolution.y, 24)
-            {
-                enableRandomWrite = true
-            };
-            renderTexture.Create();
-
-            // Set texture in shader
-            rmShader.SetTexture(0, "Result", renderTexture);
-            rmShader.SetTexture(1, "Result", renderTexture);
-        }
-
         shaderHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
 
-        shaderHelper.DispatchKernel(rmShader, "RenderNoiseTextures", Resolution, rmShaderThreadSize);
+        if (RenderNoiseTextures) {shaderHelper.DispatchKernel(rmShader, "RenderNoiseTextures", Resolution, rmShaderThreadSize); }
     }
     
     void RunSSShader()
@@ -368,29 +357,21 @@ public class Main : MonoBehaviour
         shaderHelper.DispatchKernel(pcShader, "SetLastRots", NumTriObjects, pcShaderThreadSize);
     }
 
-    void RunNGShader()
+    void InitNoiseTextures()
     {
-        // PERLIN_3D -> PerlinNoise
-        int MaxNoiseCellSize = NoiseCellSize;
-        int NumPasses = (int)Mathf.Log(MaxNoiseCellSize, 2);
+        TextureBlendTest = Init.CreateTexture(NoiseResolution, 1);
+        RenderTexture TexA = Init.CreateTexture(NoiseResolution, 1);
+        RenderTexture TexB = Init.CreateTexture(NoiseResolution, 1);
 
-        ngShader.SetInt("NumPasses", NumPasses);
-        ngShader.SetInt("MaxNoiseCellSize", MaxNoiseCellSize);
+        textureHelper.SetVoronoi(ref TexA, NoiseResolution, NoiseCellSize, FrameRand);
+        textureHelper.SetVoronoi(ref TexB, NoiseResolution, NoiseCellSize, FrameRand*2+2132); // Semi random
 
-        int NoiseCellSize2 = MaxNoiseCellSize*2;
-        for (int pass = 0; pass < NumPasses; pass++)
-        {
-            NoiseCellSize2 /= 2;
-            ngShader.SetInt("NoiseCellSize", NoiseCellSize2);
-            ngShader.SetInt("PassCount", pass);
+        textureHelper.InvertTexture(ref TexA, NoiseResolution);
+        
+        textureHelper.SetTextureBlend(ref TextureBlendTest, TexA, TexB, NoiseResolution, LerpFactor);
 
-            shaderHelper.DispatchKernel(ngShader, "GenerateVectorMap", NoiseResolution / NoiseCellSize2, ngShaderThreadSize);
-            shaderHelper.DispatchKernel(ngShader, "Perlin", NoiseResolution, ngShaderThreadSize);
-        }
-
-        // VORONOI_3D -> VoronoiNoise
-        shaderHelper.DispatchKernel(ngShader, "GeneratePointsMap", NoiseResolution / NoiseCellSize, ngShaderThreadSize);
-        shaderHelper.DispatchKernel(ngShader, "Voronoi", NoiseResolution, ngShaderThreadSize);
+        rmShader.SetTexture(1, "PerlinNoise", TextureBlendTest);
+        rmShader.SetTexture(1, "VoronoiNoise", TexA);
     }
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)

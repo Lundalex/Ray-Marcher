@@ -1,0 +1,26 @@
+#pragma kernel TextureBlend_3D_F1 // 0
+#pragma kernel TextureInvert_3D_F1 // 1
+
+#include "MathResourcesRT.hlsl"
+
+static const int ThreadsNum = 8;
+
+const float LerpWeight;
+
+RWTexture3D<float> Texture_A;
+RWTexture3D<float> Texture_B;
+RWTexture3D<float> Texture_Output;
+
+RWTexture3D<float> Texture_Invert;
+
+[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+void TextureBlend_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] = lerp(Texture_A[id], Texture_B[id], LerpWeight);
+}
+
+[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+void TextureInvert_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Invert[id] = 1 - Texture_Invert[id];
+}
