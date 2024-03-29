@@ -157,8 +157,7 @@ public class ShaderHelper : MonoBehaviour
     public void UpdateRMVariables (ComputeShader rmShader)
     {
         // Frame set variables
-        m.FrameRand = UnityEngine.Random.Range(0, 999999);
-        rmShader.SetInt("FrameRand", m.FrameRand);
+        rmShader.SetInt("FrameRand", Func.RandInt(0, 999999));
         rmShader.SetInt("FrameCount", m.FrameCount++);
 
         // Camera position

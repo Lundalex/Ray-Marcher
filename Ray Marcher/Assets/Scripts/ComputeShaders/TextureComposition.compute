@@ -1,0 +1,121 @@
+#pragma kernel Copy_3D_F1 // 0
+#pragma kernel Blend_3D_F1 // 1
+#pragma kernel Invert_3D_F1 // 2
+#pragma kernel Saturate_3D_F1 // 3
+#pragma kernel ChangeBrightness_3D_F1 // 4
+#pragma kernel AddBrightnessFixed_3D_F1 // 5
+#pragma kernel AddBrightnessByTexture_3D_F1 // 6
+#pragma kernel SubtractBrightnessByTexture_3D_F1 // 7
+#pragma kernel GaussianBlur_3D_F1 // 8
+#pragma kernel BoxBlur_3D_F1 // 9
+
+#include "MathResourcesRT.hlsl"
+#include "Constants.hlsl"
+
+const float LerpWeight;
+const float BrightnessAddOn;
+const float BrightnessFactor;
+const int SmoothingRadius;
+const uint3 Resolution;
+
+RWTexture3D<float> Texture_A;
+RWTexture3D<float> Texture_B;
+RWTexture3D<float> Texture_Output;
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void Copy_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] = Texture_A[id];
+}
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void Blend_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] = lerp(Texture_A[id], Texture_B[id], LerpWeight);
+}
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void Invert_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] = 1.0 - saturate(Texture_Output[id]);
+}
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void Saturate_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] = saturate(Texture_Output[id]);
+}
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void ChangeBrightness_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] *= BrightnessFactor;
+}
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void AddBrightnessFixed_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] += BrightnessAddOn; // 0 > BrightnessAddOn -> subtraction
+}
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void AddBrightnessByTexture_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] += Texture_A[id] * BrightnessFactor;
+}
+
+[numthreads(TN_TC,TN_TC,TN_TC)]
+void SubtractBrightnessByTexture_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    Texture_Output[id] -= Texture_A[id] * BrightnessFactor;
+}
+
+[numthreads(TN_TC, TN_TC, TN_TC)]
+void GaussianBlur_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    float sum = 0.0;
+    for (int x = -SmoothingRadius; x <= SmoothingRadius; x++)
+    {
+        for (int y = -SmoothingRadius; y <= SmoothingRadius; y++)
+        {
+            for (int z = -SmoothingRadius; z <= SmoothingRadius; z++)
+            {
+                float weight = WeightFromGBLookup(abs(x), abs(y), abs(z), SmoothingRadius);
+
+                uint3 index = (id + int3(x, y, z) + Resolution) % Resolution; // Wrap neighboor sample indices around texture resolution
+                float sample = Texture_A[index];
+
+                sum += sample * weight;
+            }
+        }
+    }
+
+    float totWeight = TotWeightFromGBLookup(SmoothingRadius);
+    float weightedSum = sum / totWeight;
+
+    Texture_Output[id] = weightedSum;
+}
+
+[numthreads(TN_TC, TN_TC, TN_TC)]
+void BoxBlur_3D_F1 (uint3 id : SV_DispatchThreadID)
+{
+    float sum = 0.0;
+    for (int x = -SmoothingRadius; x <= SmoothingRadius; x++)
+    {
+        for (int y = -SmoothingRadius; y <= SmoothingRadius; y++)
+        {
+            for (int z = -SmoothingRadius; z <= SmoothingRadius; z++)
+            {
+                uint3 index = (id + int3(x, y, z) + Resolution) % Resolution; // Wrap neighboor sample indices around texture resolution
+                float sample = Texture_A[index];
+
+                sum += sample; // Weight == 1.0
+            }
+        }
+    }
+
+    float totWeight = pow(1 + 2*SmoothingRadius, 3);
+    float weightedSum = sum / totWeight;
+
+    Texture_Output[id] = weightedSum;
+}

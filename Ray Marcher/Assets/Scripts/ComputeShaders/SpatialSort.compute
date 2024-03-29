@@ -5,8 +5,7 @@
 #pragma kernel PopulateStartIndices // 4
 
 #include "MathResourcesRT.hlsl"
-
-static const int ThreadsNum = 512;
+#include "Constants.hlsl"
 
 // Num constants
 const int4 NumChunks; // x, y, z, x*y
@@ -99,7 +98,7 @@ void ApplyChunkGridOffset(inout float3 point2)
     point2 += ChunkGridOffset;
 }
 
-[numthreads(ThreadsNum,1,1)]
+[numthreads(TN_SS,1,1)]
 void CalcSphereChunkKeys (uint3 id : SV_DispatchThreadID)
 {
     int i = id.x;
@@ -130,7 +129,7 @@ void CalcSphereChunkKeys (uint3 id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(ThreadsNum,1,1)]
+[numthreads(TN_SS,1,1)]
 void CalcTriChunkKeys (uint3 id : SV_DispatchThreadID)
 {
     int i = id.x;
@@ -172,7 +171,7 @@ void CalcTriChunkKeys (uint3 id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(ThreadsNum,1,1)]
+[numthreads(TN_SS,1,1)]
 void PopulateSpatialLookup (uint3 id : SV_DispatchThreadID)
 {
     int i = id.x;
@@ -189,7 +188,7 @@ void PopulateSpatialLookup (uint3 id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(ThreadsNum,1,1)]
+[numthreads(TN_SS,1,1)]
 void SortIteration (uint3 id : SV_DispatchThreadID)
 {
     int lowRef = id.x;
@@ -216,7 +215,7 @@ void SortIteration (uint3 id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(ThreadsNum,1,1)]
+[numthreads(TN_SS,1,1)]
 void PopulateStartIndices (uint3 id : SV_DispatchThreadID)
 {
     int i = id.x;

@@ -2,8 +2,7 @@
 #pragma kernel SetLastRots // 1
 
 #include "MathResourcesRT.hlsl"
-
-static const int ThreadsNum = 512;
+#include "Constants.hlsl"
 
 const uint NumTris;
 const uint NumTriObjects;
@@ -40,7 +39,7 @@ float3 GetPlaneNormal (float3 a, float3 b, float3 c)
 }
 
 // Tri normals only calculated one side of each Tri
-[numthreads(ThreadsNum,1,1)]
+[numthreads(TN_PC,1,1)]
 void CalcTriNormals (uint3 id : SV_DispatchThreadID)
 {
     uint i = id.x;
@@ -60,7 +59,7 @@ void CalcTriNormals (uint3 id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(ThreadsNum,1,1)]
+[numthreads(TN_PC,1,1)]
 void SetLastRots (uint3 id : SV_DispatchThreadID)
 {
     uint i = id.x;

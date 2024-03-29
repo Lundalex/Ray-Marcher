@@ -7,10 +7,7 @@
 #pragma kernel Voronoi // 3
 
 #include "MathResourcesRT.hlsl"
-
-static const uint ThreadsNum = 8;
-
-static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
+#include "Constants.hlsl"
 
 const uint MaxNoiseCellSize;
 const uint NoiseCellSize;
@@ -29,7 +26,7 @@ RWTexture3D<float> PerlinNoise;
 RWTexture3D<float3> PointsMap;
 RWTexture3D<float> VoronoiNoise;
 
-[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+[numthreads(TN_NG,TN_NG,TN_NG)]
 void GenerateVectorMap (uint3 id : SV_DispatchThreadID)
 {
     uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + (RngSeed + PassCount) * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
@@ -57,15 +54,15 @@ float trilinearLerp(float v_F_F_F, float v_C_F_F, float v_F_C_F, float v_C_C_F, 
     return result;
 }
 
-[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+[numthreads(TN_NG,TN_NG,TN_NG)]
 void Perlin (uint3 id : SV_DispatchThreadID)
 {
     uint3 num = NoiseResolution / (MaxNoiseCellSize * pow(2, PassCount));
 
     float3 cell = float3(id) / (MaxNoiseCellSize * pow(2, PassCount));
     uint3 floorCell = floor(cell);
-    uint3 ceilCell = ceil(cell) % num;
-    float3 frac = cell - floorCell;
+    uint3 ceilCell = (floorCell + 1) % num;
+    float3 frac = cell - float3(floorCell);
     // if (-1 > frac.x || 1 < frac.x || -1 > frac.y || 1 < frac.y || -1 > frac.z || 1 < frac.z) { return; }
 
     //       x,y,z
@@ -113,7 +110,7 @@ void Perlin (uint3 id : SV_DispatchThreadID)
     // PerlinNoise[id] += output / NumPasses * 0.5;
 }
 
-[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+[numthreads(TN_NG,TN_NG,TN_NG)]
 void GeneratePointsMap (uint3 id : SV_DispatchThreadID)
 {
     uint stateRng = id.x + id.y * NoiseResolution.x + id.z * NoiseResolution.x*NoiseResolution.y + 2 * RngSeed * NoiseResolution.x*NoiseResolution.y*NoiseResolution.z;
@@ -124,7 +121,7 @@ void GeneratePointsMap (uint3 id : SV_DispatchThreadID)
     PointsMap[id] = pos;
 }
 
-[numthreads(ThreadsNum,ThreadsNum,ThreadsNum)]
+[numthreads(TN_NG,TN_NG,TN_NG)]
 void Voronoi (uint3 id : SV_DispatchThreadID)
 {
     uint3 num = floor(NoiseResolution / MaxNoiseCellSize);

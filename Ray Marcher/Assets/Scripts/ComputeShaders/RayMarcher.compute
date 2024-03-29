@@ -4,10 +4,8 @@
 #pragma kernel RenderNoiseTextures // 1
 
 #include "MathResourcesRT.hlsl"
+#include "Constants.hlsl"
 
-static const int ThreadsNum = 8;
-
-static const float FLT_MAX = 99999999999.0; // supplement for maximum float val
 const float MaxStepSize;
 
 // Num constants
@@ -290,7 +288,7 @@ TraceInfo Trace (Ray ray, inout int rngState)
     return traceInfo;
 }
 
-[numthreads(ThreadsNum,ThreadsNum,1)]
+[numthreads(TN_RM,TN_RM,1)]
 void TraceRays (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= (uint)Resolution.x || id.y >= (uint)Resolution.y) { return; }
@@ -332,7 +330,7 @@ void TraceRays (uint3 id : SV_DispatchThreadID)
     // Result[id.xy] = float4(col.x, col.y, col.z, 0);
 }
 
-[numthreads(ThreadsNum,ThreadsNum,1)]
+[numthreads(TN_RM,TN_RM,1)]
 void RenderNoiseTextures (uint3 id : SV_DispatchThreadID)
 {
     // Render PerlinNoise or VoronoiNoise

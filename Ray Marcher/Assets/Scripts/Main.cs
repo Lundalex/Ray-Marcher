@@ -39,6 +39,7 @@ public class Main : MonoBehaviour
     public int3 NoiseResolution;
     public int NoiseCellSize;
     public float LerpFactor;
+    public int inputB;
     public float NoisePixelSize;
     public bool RenderNoiseTextures;
     [Header("References")]
@@ -80,7 +81,6 @@ public class Main : MonoBehaviour
     public ComputeBuffer CB_A;
     private bool ProgramStarted = false;
     private bool SettingsChanged = true;
-    [NonSerialized] public int FrameRand = 0;
     private Vector3 lastCameraPosition;
     private Quaternion lastCameraRotation;
 
@@ -363,13 +363,15 @@ public class Main : MonoBehaviour
         RenderTexture TexA = Init.CreateTexture(NoiseResolution, 1);
         RenderTexture TexB = Init.CreateTexture(NoiseResolution, 1);
 
-        textureHelper.SetVoronoi(ref TexA, NoiseResolution, NoiseCellSize, FrameRand);
-        textureHelper.SetVoronoi(ref TexB, NoiseResolution, NoiseCellSize, FrameRand*2+2132); // Semi random
+        textureHelper.SetPerlin(ref TexA, NoiseResolution, NoiseCellSize, Func.RandInt(0, 999999));
+        textureHelper.SetVoronoi(ref TexB, NoiseResolution, NoiseCellSize, Func.RandInt(0, 999999)); // Semi random
 
-        textureHelper.InvertTexture(ref TexA, NoiseResolution);
+        textureHelper.Invert(ref TexA, NoiseResolution);
         
-        textureHelper.SetTextureBlend(ref TextureBlendTest, TexA, TexB, NoiseResolution, LerpFactor);
+        textureHelper.Blend(ref TextureBlendTest, TexA, TexB, NoiseResolution, LerpFactor);
 
+        textureHelper.GaussianBlur(ref TextureBlendTest, NoiseResolution, inputB, 1);
+        
         rmShader.SetTexture(1, "PerlinNoise", TextureBlendTest);
         rmShader.SetTexture(1, "VoronoiNoise", TexA);
     }

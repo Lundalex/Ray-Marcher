@@ -87,6 +87,10 @@ namespace Resources
             double logValue = Math.Log(a, 2);
             return doCeil ? (int)Math.Ceiling(logValue) : (int)logValue;
         }
+        public static int RandInt(int min, int max)
+        {
+            return UnityEngine.Random.Range(min, max+1);
+        }
         public static int NextPow2(int a)
         {
             int nextPow2 = 1;

@@ -318,6 +318,7 @@ MonoBehaviour:
     z: 128
   NoiseCellSize: 64
   LerpFactor: 0.5
+  inputB: 0
   NoisePixelSize: 1
   RenderNoiseTextures: 1
   rmShader: {fileID: 7200000, guid: 96721caf6d7a30541a45491bb6102c23, type: 3}
@@ -355,7 +356,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   shaderHelper: {fileID: 1356186230}
   ngShader: {fileID: 7200000, guid: 32d14956dd6debe4bb7131ef8165e449, type: 3}
-  tbShader: {fileID: 7200000, guid: 931bbcb60d8775f41a1fc0ce3e0f9f67, type: 3}
+  tcShader: {fileID: 7200000, guid: 931bbcb60d8775f41a1fc0ce3e0f9f67, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
