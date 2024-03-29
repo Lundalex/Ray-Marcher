@@ -144,7 +144,6 @@ public class ShaderHelper : MonoBehaviour
 
     public void SetNGSettings (ComputeShader ngShader)
     {
-        // ngShader.SetInt("NoiseCellSize", m.NoiseCellSize);
         ngShader.SetVector("NoiseResolution", new Vector3(m.NoiseResolution.x, m.NoiseResolution.y, m.NoiseResolution.z));
     }
 

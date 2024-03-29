@@ -315,10 +315,10 @@ MonoBehaviour:
   NoiseResolution:
     x: 512
     y: 512
-    z: 128
-  NoiseCellSize: 64
-  LerpFactor: 0.5
-  inputB: 0
+    z: 256
+  NoiseCellSize: 128
+  LerpFactor: 0.15
+  inputB: 3
   NoisePixelSize: 1
   RenderNoiseTextures: 1
   rmShader: {fileID: 7200000, guid: 96721caf6d7a30541a45491bb6102c23, type: 3}

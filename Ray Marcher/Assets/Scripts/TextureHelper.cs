@@ -24,12 +24,15 @@ public class TextureHelper : MonoBehaviour
         shaderHelper.DispatchKernel(tcShader, "Copy_3D_F1", resolution, tbShaderThreadSize);
     }
 
-    public void Blend (ref RenderTexture textureOutput, RenderTexture textureA, RenderTexture textureB, int3 resolution, float lerpWeight)
+    public void Blend (ref RenderTexture textureOutput, RenderTexture textureA, int3 resolution, float lerpWeight = 0.5f)
     {
+        RenderTexture texCopy = Init.CreateTexture(resolution, 1);
+        Copy(ref texCopy, textureOutput, resolution);
+
         tcShader.SetFloat("LerpWeight", lerpWeight);
 
         tcShader.SetTexture(1, "Texture_A", textureA);
-        tcShader.SetTexture(1, "Texture_B", textureB);
+        tcShader.SetTexture(1, "Texture_B", texCopy);
         tcShader.SetTexture(1, "Texture_Output", textureOutput);
 
         shaderHelper.DispatchKernel(tcShader, "Blend_3D_F1", resolution, tbShaderThreadSize);
@@ -154,6 +157,7 @@ public class TextureHelper : MonoBehaviour
         UpdateScriptTextures(resolution, cellSize);
 
         ngShader.SetInt("RngSeed", rngSeed);
+        ngShader.SetInt("MaxNoiseCellSize", cellSize);
 
         shaderHelper.DispatchKernel(ngShader, "GeneratePointsMap", resolution / cellSize, ngShaderThreadSize);
         ngShader.SetTexture(3, "VoronoiNoise", texture);

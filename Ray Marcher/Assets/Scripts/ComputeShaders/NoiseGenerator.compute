@@ -87,20 +87,20 @@ void Perlin (uint3 id : SV_DispatchThreadID)
     float perlinResult = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac);
 
     // Very bad vidual artifacts
-    // float output = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac) *.5 + .5;
+    float output = trilinearLerp(d_F_F_F, d_C_F_F, d_F_C_F, d_C_C_F, d_F_F_C, d_C_F_C, d_F_C_C, d_C_C_C, frac) *.5 + .5;
 
     // Also generates visual artifacts, but less
-    float output;
-    if (perlinResult < -0.4) { output = 0.1; }
-    else if (perlinResult < -0.3) { output = 0.2; }
-    else if (perlinResult < -0.2) { output = 0.3; }
-    else if (perlinResult < -0.1) { output = 0.4; }
-    else if (perlinResult < 0) { output = 0.5; }
-    else if (perlinResult < 0.1) { output = 0.6; }
-    else if (perlinResult < 0.2) { output = 0.7; }
-    else if (perlinResult < 0.3) { output = 0.8; } 
-    else if (perlinResult < 0.4) { output = 0.9; }
-    else if (perlinResult <= 0.6) { output = 1.0; }
+    // float output;
+    // if (perlinResult < -0.4) { output = 0.1; }
+    // else if (perlinResult < -0.3) { output = 0.2; }
+    // else if (perlinResult < -0.2) { output = 0.3; }
+    // else if (perlinResult < -0.1) { output = 0.4; }
+    // else if (perlinResult < 0) { output = 0.5; }
+    // else if (perlinResult < 0.1) { output = 0.6; }
+    // else if (perlinResult < 0.2) { output = 0.7; }
+    // else if (perlinResult < 0.3) { output = 0.8; } 
+    // else if (perlinResult < 0.4) { output = 0.9; }
+    // else if (perlinResult <= 0.6) { output = 1.0; }
 
     if (MaxNoiseCellSize == NoiseCellSize)
     {
