@@ -8,23 +8,7 @@ public class ShaderHelper : MonoBehaviour
     public Main m;
     public TextureHelper th;
 
-    // Method overloading - int / int2 / int3 threadsNum
-    public void DispatchKernel (ComputeShader cs, string kernelName, int threadsNum, int threadSize)
-    {
-        int threadGroupNum = Utils.GetThreadGroupsNum(threadsNum, threadSize);
-        cs.Dispatch(cs.FindKernel(kernelName), threadGroupNum, 1, 1);
-    }
-    public void DispatchKernel (ComputeShader cs, string kernelName, int2 threadsNum, int threadSize)
-    {
-        int2 threadGroupNums = Utils.GetThreadGroupsNumsXY(threadsNum, threadSize);
-        cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, 1);
-    }
-
-    public void DispatchKernel (ComputeShader cs, string kernelName, int3 threadsNum, int threadSize)
-    {
-        int3 threadGroupNums = Utils.GetThreadGroupsNumsXYZ(threadsNum, threadSize);
-        cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, threadGroupNums.z);
-    }
+// --- SHADER BUFFERS ---
 
     public void SetRMShaderBuffers (ComputeShader rmShader)
     {
@@ -76,6 +60,8 @@ public class ShaderHelper : MonoBehaviour
 
         ngShader.SetTexture(3, "PointsMap", th.T_PointsMap);
     }
+
+// --- SHADER SETTINGS / VARIABLES ---
 
     public void SetRMSettings (ComputeShader rmShader)
     {
@@ -157,7 +143,7 @@ public class ShaderHelper : MonoBehaviour
     {
         // Frame set variables
         rmShader.SetInt("FrameRand", Func.RandInt(0, 999999));
-        rmShader.SetInt("FrameCount", m.FrameCount++);
+        rmShader.SetInt("FrameCount", m.FrameCount);
 
         // Camera position
         float3 worldSpaceCameraPos = transform.position;
@@ -166,13 +152,35 @@ public class ShaderHelper : MonoBehaviour
         // Camera orientation
         float3 cameraRot = transform.rotation.eulerAngles * Mathf.Deg2Rad;
         rmShader.SetVector("CameraRotation", new Vector3(cameraRot.x, cameraRot.y, cameraRot.z));
+        // Changes made for better intuitivity
+        float temp = cameraRot.x;
+        cameraRot.x = cameraRot.y;
+        cameraRot.y = -temp;
+        cameraRot.z = -cameraRot.z;
+
+        // Camera transform matrix
+        float cosX = Mathf.Cos(cameraRot.x);
+        float sinX = Mathf.Sin(cameraRot.x);
+        float cosY = Mathf.Cos(cameraRot.y);
+        float sinY = Mathf.Sin(cameraRot.y);
+        float cosZ = Mathf.Cos(cameraRot.z);
+        float sinZ = Mathf.Sin(cameraRot.z);
+        // Combined camera transform
+        // Unity only allows setting 4x4 matrices (will get converted to 3x3 automatically in shader)
+        float4x4 CameraTransform = new float4x4(
+            cosY * cosZ,                             cosY * sinZ,                           -sinY, 0.0f,
+            sinX * sinY * cosZ - cosX * sinZ,   sinX * sinY * sinZ + cosX * cosZ,  sinX * cosY, 0.0f,
+            cosX * sinY * cosZ + sinX * sinZ,   cosX * sinY * sinZ - sinX * cosZ,  cosX * cosY, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f
+        );
+
+        rmShader.SetMatrix("CameraTransform", CameraTransform);
     }
 
     public void UpdateNGVariables (ComputeShader ngShader)
     {
         // Frame set variables
-        int FrameRand = UnityEngine.Random.Range(0, 999999);
-        ngShader.SetInt("FrameRand", FrameRand);
-        ngShader.SetInt("FrameCount", m.FrameCount++);
+        ngShader.SetInt("FrameRand", UnityEngine.Random.Range(0, 999999));
+        ngShader.SetInt("FrameCount", m.FrameCount);
     }
 }

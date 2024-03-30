@@ -4,7 +4,6 @@ using System;
 
 // Import utils from Resources.cs
 using Resources;
-using System.Security.Cryptography;
 
 public class Main : MonoBehaviour
 {
@@ -153,8 +152,7 @@ public class Main : MonoBehaviour
                 parentKey = 0,
             };
         }
-        B_Tris ??= new ComputeBuffer(Tris.Length, Stride_Tri);
-        B_Tris.SetData(Tris);
+        ComputeHelper.CreateStructuredBuffer<Tri>(ref B_Tris, Tris);
 
         SetTriObjectData();
     }
@@ -184,13 +182,13 @@ public class Main : MonoBehaviour
 
     void InitBuffers()
     {
-        B_SpatialLookup ??= new ComputeBuffer(Func.NextPow2(NumObjects * ChunksPerObject), sizeof(int) * 2);
-        B_StartIndices ??= new ComputeBuffer(NumChunksAll, sizeof(int));
+        ComputeHelper.CreateStructuredBuffer<int2>(ref B_SpatialLookup, Func.NextPow2(NumObjects * ChunksPerObject));
+        ComputeHelper.CreateStructuredBuffer<int>(ref B_StartIndices, NumChunksAll);
 
-        AC_OccupiedChunks ??= new ComputeBuffer(Func.NextPow2(NumObjects * ChunksPerObject), sizeof(int) * 2, ComputeBufferType.Append);
-        CB_A = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Raw);
+        ComputeHelper.CreateAppendBuffer<int2>(ref AC_OccupiedChunks, Func.NextPow2(NumObjects * ChunksPerObject));
+        ComputeHelper.CreateCountBuffer(ref CB_A);
 
-        renderTexture = Init.CreateTexture(Resolution, 3);
+        TextureHelper.CreateTexture(ref renderTexture, Resolution, 3);
     }
 
     void SetTriObjectData()
@@ -222,12 +220,12 @@ public class Main : MonoBehaviour
             }
         }
 
-        B_TriObjects ??= new ComputeBuffer(TriObjects.Length, Stride_TriObject);
-        B_TriObjects.SetData(TriObjects);
+        ComputeHelper.CreateStructuredBuffer<TriObject>(ref B_TriObjects, TriObjects);
     }
 
     void Update()
     {
+        FrameCount++;
         shaderHelper.UpdateRMVariables(rmShader);
         shaderHelper.UpdateNGVariables(ngShader);
     }
@@ -276,8 +274,7 @@ public class Main : MonoBehaviour
                 materialKey = i == 0 ? 1 : 0,
             };
         }
-        B_Spheres ??= new ComputeBuffer(SpheresInput.Length, Stride_Sphere);
-        B_Spheres.SetData(Spheres);
+        ComputeHelper.CreateStructuredBuffer<Sphere>(ref B_Spheres, Spheres);
 
         // Set Materials data
         Materials = new Material2[MatTypesInput1.Length];
@@ -291,35 +288,33 @@ public class Main : MonoBehaviour
                 smoothness = MatTypesInput2[i].x
             };
         }
-        B_Materials ??= new ComputeBuffer(MatTypesInput1.Length, Stride_Material);
-        B_Materials.SetData(Materials);
+        ComputeHelper.CreateStructuredBuffer<Material2>(ref B_Materials, Materials);
     }
 
     void RunRMShader()
     {
-        shaderHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
+        ComputeHelper.DispatchKernel(rmShader, "TraceRays", Resolution, rmShaderThreadSize);
 
-        if (RenderNoiseTextures) {shaderHelper.DispatchKernel(rmShader, "RenderNoiseTextures", Resolution, rmShaderThreadSize); }
+        if (RenderNoiseTextures) {ComputeHelper.DispatchKernel(rmShader, "RenderNoiseTextures", Resolution, rmShaderThreadSize); }
     }
     
     void RunSSShader()
     {
         // Fill OccupiedChunks
         AC_OccupiedChunks.SetCounterValue(0);
-        shaderHelper.DispatchKernel(ssShader, "CalcSphereChunkKeys", NumSpheres, ssShaderThreadSize);
-        if (RenderTris) { shaderHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize); } 
+        ComputeHelper.DispatchKernel(ssShader, "CalcSphereChunkKeys", NumSpheres, ssShaderThreadSize);
+        if (RenderTris) { ComputeHelper.DispatchKernel(ssShader, "CalcTriChunkKeys", NumTris, ssShaderThreadSize); } 
 
         // Get OccupiedChunks length
         // THIS IS QUITE EXPENSIVE SINCE IT REQUIRES DATA TO BE SENT FROM THE GPU TO THE CPU!
-        ComputeBuffer.CopyCount(AC_OccupiedChunks, CB_A, 0);
-        int[] OC_lenArr = new int[1];
-        CB_A.GetData(OC_lenArr);
-        int OC_len = Func.NextPow2(OC_lenArr[0]); // NextPow2() since bitonic merge sort requires pow2 array length
+        int OC_len = ComputeHelper.GetAppendBufferCount(AC_OccupiedChunks, CB_A);
+        Func.NextPow2(ref OC_len); // NextPow2() since bitonic merge sort requires pow2 array length
 
+        // Set NextPow2(OccupiedChunks count) in shader
         ssShader.SetInt("OC_len", OC_len);
 
         // Copy OccupiedChunks -> SpatialLookup
-        shaderHelper.DispatchKernel(ssShader, "PopulateSpatialLookup", OC_len, ssShaderThreadSize);
+        ComputeHelper.DispatchKernel(ssShader, "PopulateSpatialLookup", OC_len, ssShaderThreadSize);
 
         // Sort SpatialLookup
         int basebBlockLen = 2;
@@ -332,7 +327,7 @@ public class Main : MonoBehaviour
 
                 shaderHelper.UpdateSortIterationVariables(ssShader, blockLen, brownPinkSort);
 
-                shaderHelper.DispatchKernel(ssShader, "SortIteration", OC_len / 2, ssShaderThreadSize);
+                ComputeHelper.DispatchKernel(ssShader, "SortIteration", OC_len / 2, ssShaderThreadSize);
 
                 blockLen /= 2;
             }
@@ -340,20 +335,13 @@ public class Main : MonoBehaviour
         }
 
         // Set StartIndices
-        shaderHelper.DispatchKernel(ssShader, "PopulateStartIndices", OC_len, ssShaderThreadSize);
-
-        // int2[] t_A = new int2[OC_len];
-        // B_SpatialLookup.GetData(t_A);
-        
-        // int[] t_B = new int[NumChunksAll];
-        // B_StartIndices.GetData(t_B);
-
+        ComputeHelper.DispatchKernel(ssShader, "PopulateStartIndices", OC_len, ssShaderThreadSize);
     }
 
     void RunPCShader()
     {
-        shaderHelper.DispatchKernel(pcShader, "CalcTriNormals", NumTris, pcShaderThreadSize);
-        shaderHelper.DispatchKernel(pcShader, "SetLastRots", NumTriObjects, pcShaderThreadSize);
+        ComputeHelper.DispatchKernel(pcShader, "CalcTriNormals", NumTris, pcShaderThreadSize);
+        ComputeHelper.DispatchKernel(pcShader, "SetLastRots", NumTriObjects, pcShaderThreadSize);
     }
 
     void InitNoiseTextures()
@@ -361,14 +349,14 @@ public class Main : MonoBehaviour
         // -- CLOUD TEXTURE --
 
         // Perlin noise
-        RenderTexture perlin = Init.CreateTexture(NoiseResolution, 1);
+        RenderTexture perlin = TextureHelper.CreateTexture(NoiseResolution, 1);
         textureHelper.SetPerlin(ref perlin, NoiseResolution, NoiseCellSize, Func.RandInt(0, 999999));
 
         // Init voronoi textures
-        RenderTexture voronoi0 = Init.CreateTexture(NoiseResolution, 1);
-        RenderTexture voronoi1 = Init.CreateTexture(NoiseResolution, 1);
-        RenderTexture voronoi2 = Init.CreateTexture(NoiseResolution, 1);
-        RenderTexture voronoi3 = Init.CreateTexture(NoiseResolution, 1);
+        RenderTexture voronoi0 = TextureHelper.CreateTexture(NoiseResolution, 1);
+        RenderTexture voronoi1 = TextureHelper.CreateTexture(NoiseResolution, 1);
+        RenderTexture voronoi2 = TextureHelper.CreateTexture(NoiseResolution, 1);
+        RenderTexture voronoi3 = TextureHelper.CreateTexture(NoiseResolution, 1);
 
         // Set voronoi textures
         textureHelper.SetVoronoi(ref voronoi0, NoiseResolution, NoiseCellSize, Func.RandInt(0, 999999));
@@ -402,7 +390,7 @@ public class Main : MonoBehaviour
         textureHelper.GaussianBlur(ref voronoi0, NoiseResolution, 3, 5);
         
         rmShader.SetTexture(1, "NoiseA", voronoi0);
-        rmShader.SetTexture(1, "NoiseB", Init.CreateTexture(NoiseResolution, 1)); // Nothing to display for NoiseB
+        rmShader.SetTexture(1, "NoiseB", TextureHelper.CreateTexture(NoiseResolution, 1)); // Nothing to display for NoiseB
     }
 
     public void OnRenderImage(RenderTexture src, RenderTexture dest)
@@ -418,16 +406,6 @@ public class Main : MonoBehaviour
 
     void OnDestroy()
     {
-        // Scene objects
-        B_TriObjects?.Release();
-        B_Tris?.Release();
-        B_Spheres?.Release();
-        B_Materials?.Release();
-
-        // Spatial sort
-        B_SpatialLookup?.Release();
-        B_StartIndices?.Release();
-        AC_OccupiedChunks?.Release();
-        CB_A?.Release();
+        ComputeHelper.Release(B_TriObjects, B_Tris, B_Spheres, B_Materials, B_SpatialLookup, B_StartIndices, AC_OccupiedChunks, CB_A);
     }
 }

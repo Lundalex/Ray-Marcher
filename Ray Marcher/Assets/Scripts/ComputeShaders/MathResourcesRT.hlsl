@@ -27,6 +27,19 @@ float sqr(float a)
 	return a * a;
 }
 
+float avg(float a, float b) // float version
+{
+    return .5 * (a + b);
+}
+float2 avg(float2 a, float2 b) // float2 version
+{
+    return .5 * (a + b);
+}
+float3 avg(float3 a, float3 b) // float3 version
+{
+    return .5 * (a + b);
+}
+
 float dot2(float3 a) // float3 version
 {
     return dot(a, a);

@@ -38,7 +38,7 @@ namespace Resources
         public float brightness;
         public float smoothness;
     };
-    public class Utils
+    public static class Utils
     {
         public static Vector2 GetMouseWorldPos(int Width, int Height)
         {
@@ -80,7 +80,7 @@ namespace Resources
         }
     }
 
-    public class Func
+    public static class Func
     {
         public static int Log2(int a, bool doCeil = false)
         {
@@ -100,96 +100,14 @@ namespace Resources
             }
             return nextPow2;
         }
-    }
-
-    public class Init
-    {
-        // Method overloading (int2 / int3) resolution for 2D and 3D textures
-        public static RenderTexture CreateTexture(int3 resolution, int channels)
+        public static void NextPow2(ref int a)
         {
-            if (channels == 1)
+            int nextPow2 = 1;
+            while (nextPow2 < a)
             {
-                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.R16) // 0.0-1.0 with linear accuracy, single channel
-                {
-                    dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
-                    volumeDepth = resolution.z,
-                    enableRandomWrite = true,
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear
-                };
-                texture.Create();
-
-                return texture;
+                nextPow2 *= 2;
             }
-
-            else if (channels == 2)
-            {
-                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGFloat)
-                {
-                    dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
-                    volumeDepth = resolution.z,
-                    enableRandomWrite = true,
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear
-                };
-                texture.Create();
-
-                return texture;
-            }
-
-            else // channels == 3
-            {
-                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGB111110Float)
-                {
-                    dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
-                    volumeDepth = resolution.z,
-                    enableRandomWrite = true,
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear
-                };
-                texture.Create();
-
-                return texture;
-            }
-        }
-        public static RenderTexture CreateTexture(int2 resolution, int channels)
-        {
-            if (channels == 1)
-            {
-                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.R16)
-                {
-                    dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
-                    enableRandomWrite = true,
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear
-                };
-                texture.Create();
-                return texture;
-            }
-            else if (channels == 2)
-            {
-                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGFloat)
-                {
-                    dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
-                    enableRandomWrite = true,
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear
-                };
-                texture.Create();
-                return texture;
-            }
-            else // channels == 3
-            {
-                RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGB111110Float)
-                {
-                    dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
-                    enableRandomWrite = true,
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear
-                };
-                texture.Create();
-                return texture;
-            }
+            a = nextPow2;
         }
     }
 }

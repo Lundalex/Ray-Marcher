@@ -45,6 +45,9 @@ const float NoisePixelSize;
 const float3 WorldSpaceCameraPos;
 const float3 CameraRotation;
 
+// Camera transform matrix
+const float3x3 CameraTransform;
+
 // Per frame
 const uint FrameRand; // "random" value from 0 to 999999, gets reset each frame
 const uint FrameCount; // Each frame: FrameCount++
@@ -56,11 +59,9 @@ struct Ray
     float3 pos;
     float3 dir;
 };
-struct StepInfo
+struct ScanInfo
 {
     float nearDst;
-
-    // Hit only:
     float3 normal;
     int materialKey;
 };
@@ -129,24 +130,14 @@ bool IsOutsideBounds(float3 point2)
     return false;
 }
 
+uint GetChunkKey(uint3 chunk)
+{
+    return chunk.x + chunk.y*NumChunks.x + chunk.z*NumChunks.w;
+}
+
 float3 ApplyCameraTransform(float3 point2)
 {
-    float cosX = cos(CameraRotation.x);
-    float sinX = sin(CameraRotation.x);
-    float cosY = cos(CameraRotation.y);
-    float sinY = sin(CameraRotation.y);
-    float cosZ = cos(CameraRotation.z);
-    float sinZ = sin(CameraRotation.z);
-
-    // Combine rotation matrices into a single matrix
-    float3x3 rotationMatrix = float3x3(
-        cosY * cosZ,                             cosY * sinZ,                           -sinY,
-        sinX * sinY * cosZ - cosX * sinZ,   sinX * sinY * sinZ + cosX * cosZ,  sinX * cosY,
-        cosX * sinY * cosZ + sinX * sinZ,   cosX * sinY * sinZ - sinX * cosZ,  cosX * cosY
-    );
-
-    // Apply the combined rotation matrix to the point
-    return mul(rotationMatrix, point2);
+    return mul(CameraTransform, point2);
 }
 
 float SphereSgnDst (float3 point2, Sphere sphere)
@@ -176,19 +167,19 @@ float TriDstSqr( float3 p, float3 a, float3 b, float3 c )
          dot(nor,pa)*dot(nor,pa)/dot2(nor);
 }
 
-StepInfo Step (Ray ray, inout int rngState)
+ScanInfo Scan (Ray ray, inout int rngState)
 {
     float nearDstSqr = MaxStepSize;
     int materialKey = -1;
     float3 normal = float3(0.0, 0.0, 0.0);
 
     float3 offsetRayPos = ray.pos + ChunkGridOffset;
-    int3 chunk = int3(offsetRayPos / CellSize);
+    uint3 chunk = uint3(offsetRayPos / CellSize);
 
-    int chunkKey = chunk.x + chunk.y*NumChunks.x + chunk.z*NumChunks.w;
-    int startIndex = StartIndices[chunkKey];
+    uint chunkKey = GetChunkKey(chunk);
+    uint startIndex = StartIndices[chunkKey];
 
-    int Index = startIndex;
+    uint Index = startIndex;
     while (Index != -1 && chunkKey == SpatialLookup[Index].y)
     {
         uint objectIndex = SpatialLookup[Index].x;
@@ -229,36 +220,35 @@ StepInfo Step (Ray ray, inout int rngState)
 
     float nearDst = sqrt(nearDstSqr);
 
-    StepInfo stepInfo;
-    stepInfo.nearDst = nearDst;
-    stepInfo.normal = normal;
-    stepInfo.materialKey = materialKey;
+    ScanInfo scanInfo;
+    scanInfo.nearDst = nearDst;
+    scanInfo.normal = normal;
+    scanInfo.materialKey = materialKey;
 
-    return stepInfo;
+    return scanInfo;
 }
 
 TraceInfo Trace (Ray ray, inout int rngState)
 {
     TraceInfo traceInfo;
-    traceInfo.rayColor = 1; // Default is (1, 1, 1)
-    traceInfo.incomingLight = 0; // Default incoming light is (0, 0, 0)
-    // traceInfo.incomingLight = abs(randPointOnUnitSphere(rngState));
+    traceInfo.rayColor = 1; // Default color is (1, 1, 1) (white)
+    traceInfo.incomingLight = 0; // Default incoming light is (0, 0, 0) (black)
 
-    // Step through scene
+    // Traverse through scene
     for (int stepCount = 0; stepCount < MaxStepCount; stepCount++)
     {
-        StepInfo stepInfo = Step(ray, rngState);
+        ScanInfo scanInfo = Scan(ray, rngState);
 
         // March by nearest dst length
-        ray.pos += stepInfo.nearDst * ray.dir;
+        ray.pos += scanInfo.nearDst * ray.dir;
         if (IsOutsideBounds(ray.pos)) { return traceInfo; }
 
         // Hit?
-        if (stepInfo.nearDst < HitThreshold)
+        if (scanInfo.nearDst < HitThreshold)
         {
-            Material2 material = Materials[stepInfo.materialKey];
+            Material2 material = Materials[scanInfo.materialKey];
             
-            ray.pos -= (0.02 + stepInfo.nearDst) * ray.dir; // Revert last ray march step + epsilon offset
+            ray.pos -= (0.02 + scanInfo.nearDst) * ray.dir; // Revert last ray march step + epsilon offset
 
             // Calculate new ray origin
             ray.origin = ray.pos;
@@ -268,12 +258,12 @@ TraceInfo Trace (Ray ray, inout int rngState)
             // isSpecularBounce == True -> ray.dir = norm(lerp(scatterDir, specularDir, material.smoothness))
             bool isSpecularBounce = ScatterProbability < randNormalized(rngState);
             // Cosine weighted randPointOnUnitSphere. This removes the need for any "light spread" calculations
-            float3 scatterDir = normalize(stepInfo.normal + randPointOnUnitSphere(rngState));
-            float3 specularDir = reflect(ray.dir, stepInfo.normal);
+            float3 scatterDir = normalize(scanInfo.normal + randPointOnUnitSphere(rngState));
+            float3 specularDir = reflect(ray.dir, scanInfo.normal);
             ray.dir = normalize(lerp(scatterDir, specularDir, material.smoothness * isSpecularBounce));
 
             // Validate ray direction
-            if (dot(stepInfo.normal, ray.dir) < 0)
+            if (dot(scanInfo.normal, ray.dir) < 0)
             {
                 ray.dir = -ray.dir;
             }
@@ -292,7 +282,7 @@ TraceInfo Trace (Ray ray, inout int rngState)
 void TraceRays (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= (uint)Resolution.x || id.y >= (uint)Resolution.y) { return; }
-    int rngState = id.y * Resolution.x + id.x + FrameRand;
+    uint rngState = id.y * Resolution.x + id.x + FrameRand;
 
     // Calculate focal plane world position for the given pixel
     float2 focalPos = (float2(id.xy) / Resolution - 0.5) * 2.0 * float2(viewSpaceWidth, viewSpaceHeight);
@@ -318,16 +308,16 @@ void TraceRays (uint3 id : SV_DispatchThreadID)
     }
     combinedTraceInfo.incomingLight /= float(RaysPerPixel);
 
-    // Combine prev frame with current frame. Weight the contributions to result in an average over all frames.
+    // Combine prev frame with current frame. Weight the contributions to result in an average over all frames - DOESN'T WORK NOW FOR SOME REASON
     float3 col = combinedTraceInfo.incomingLight;
-    float3 colPrev = float3(Result[id.xy].x, Result[id.xy].y, Result[id.xy].z);
+    // float3 colPrev = float3(Result[id.xy].x, Result[id.xy].y, Result[id.xy].z);
 
-    float weight = 1.0 / (FrameCount + 1);
+    // float weight = 1.0 / (FrameCount + 1);
 
-    float3 accumulatedCol = saturate(colPrev * (1 - weight) + col * weight);
+    // float3 accumulatedCol = saturate(colPrev * (1 - weight) + col * weight);
+    // Result[id.xy] = float4(accumulatedCol.x, accumulatedCol.y, accumulatedCol.z, 0);
 
-    Result[id.xy] = float4(accumulatedCol.x, accumulatedCol.y, accumulatedCol.z, 0);
-    // Result[id.xy] = float4(col.x, col.y, col.z, 0);
+    Result[id.xy] = float4(col.x, col.y, col.z, 0);
 }
 
 [numthreads(TN_RM,TN_RM,1)]
