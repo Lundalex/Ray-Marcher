@@ -133,7 +133,7 @@ public class TextureHelper : MonoBehaviour
         }
         else // channels == 3
         {
-            RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGB111110Float)
+            RenderTexture texture = new RenderTexture(resolution.x, resolution.y, 24)
             {
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
                 enableRandomWrite = true,
@@ -170,7 +170,7 @@ public class TextureHelper : MonoBehaviour
         }
         else // channels == 3
         {
-            texture = texture != null ? texture : new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.RGB111110Float)
+            texture = texture != null ? texture : new RenderTexture(resolution.x, resolution.y, 24)
             {
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
                 enableRandomWrite = true,

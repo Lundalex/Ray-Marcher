@@ -15,12 +15,12 @@ public static class ComputeHelper
     }
     static public void DispatchKernel (ComputeShader cs, string kernelName, int2 threadsNum, int threadSize)
     {
-        int2 threadGroupNums = Utils.GetThreadGroupsNumsXY(threadsNum, threadSize);
+        int2 threadGroupNums = Utils.GetThreadGroupsNum(threadsNum, threadSize);
         cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, 1);
     }
     static public void DispatchKernel (ComputeShader cs, string kernelName, int3 threadsNum, int threadSize)
     {
-        int3 threadGroupNums = Utils.GetThreadGroupsNumsXYZ(threadsNum, threadSize);
+        int3 threadGroupNums = Utils.GetThreadGroupsNum(threadsNum, threadSize);
         cs.Dispatch(cs.FindKernel(kernelName), threadGroupNums.x, threadGroupNums.y, threadGroupNums.z);
     }
 

@@ -63,15 +63,13 @@ namespace Resources
             int threadGroupsNum = (int)Math.Ceiling((float)threadsNum / threadSize);
             return threadGroupsNum;
         }
-
-        public static int2 GetThreadGroupsNumsXY(int2 threadsNum, int threadSize)
+        public static int2 GetThreadGroupsNum(int2 threadsNum, int threadSize)
         {
             int threadGroupsNumX = GetThreadGroupsNum(threadsNum.x, threadSize);
             int threadGroupsNumY = GetThreadGroupsNum(threadsNum.y, threadSize);
             return new(threadGroupsNumX, threadGroupsNumY);
         }
-
-        public static int3 GetThreadGroupsNumsXYZ(int3 threadsNum, int threadSize)
+        public static int3 GetThreadGroupsNum(int3 threadsNum, int threadSize)
         {
             int threadGroupsNumX = GetThreadGroupsNum(threadsNum.x, threadSize);
             int threadGroupsNumY = GetThreadGroupsNum(threadsNum.y, threadSize);
@@ -82,10 +80,20 @@ namespace Resources
 
     public static class Func
     {
+        public static void Log2(ref int a, bool doCeil = false)
+        {
+            double logValue = Math.Log(a, 2);
+            a = doCeil ? (int)Math.Ceiling(logValue) : (int)logValue;
+        }
         public static int Log2(int a, bool doCeil = false)
         {
             double logValue = Math.Log(a, 2);
             return doCeil ? (int)Math.Ceiling(logValue) : (int)logValue;
+        }
+        public static int Pow2(int a)
+        {
+            double powValue = Mathf.Pow(2, a);
+            return (int)powValue;
         }
         public static int RandInt(int min, int max)
         {
@@ -108,6 +116,14 @@ namespace Resources
                 nextPow2 *= 2;
             }
             a = nextPow2;
+        }
+        public static int NextLog2(int a)
+        {
+            return Log2(NextPow2(a));
+        }
+        public static void NextLog2(ref int a)
+        {
+            a = Log2(NextPow2(a));
         }
     }
 }
