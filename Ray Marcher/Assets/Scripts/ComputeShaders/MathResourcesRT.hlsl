@@ -1,4 +1,4 @@
-static const float PI = 3.1415926;
+static const float PI  = 3.1415926;
 
 void ApplyTransformTriVertices(float3 rot, inout float3 a, inout float3 b, inout float3 c)
 {

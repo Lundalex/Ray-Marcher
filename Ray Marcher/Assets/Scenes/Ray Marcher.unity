@@ -234,7 +234,7 @@ MonoBehaviour:
   Resolution:
     x: 1920
     y: 1080
-  MaxStepCount: 80
+  MaxStepCount: 60
   RaysPerPixel: 2
   HitThreshold: 0.01
   ScatterProbability: 1
@@ -328,7 +328,6 @@ MonoBehaviour:
   shaderHelper: {fileID: 1356186230}
   textureHelper: {fileID: 1356186231}
   testMesh: {fileID: -2432090755550338912, guid: 03490d440c891024dae8213e38b712a7, type: 3}
-  a: 0
 --- !u!114 &1356186230
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -355,7 +354,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e74ac4644757dc043af459f77fcdcb85, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shaderHelper: {fileID: 1356186230}
   ngShader: {fileID: 7200000, guid: 32d14956dd6debe4bb7131ef8165e449, type: 3}
   tcShader: {fileID: 7200000, guid: 931bbcb60d8775f41a1fc0ce3e0f9f67, type: 3}
 --- !u!1660057539 &9223372036854775807

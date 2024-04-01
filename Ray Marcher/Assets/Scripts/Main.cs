@@ -55,10 +55,6 @@ public class Main : MonoBehaviour
     private int rmShaderThreadSize = 8; // /32
     private int pcShaderThreadSize = 512; // / 1024
     private int ssShaderThreadSize = 512; // / 1024
-    private int Stride_TriObject = sizeof(float) * 10 + sizeof(int) * 2;
-    private int Stride_Tri = sizeof(float) * 12 + sizeof(int) * 2;
-    private int Stride_Sphere = sizeof(float) * 4 + sizeof(int) * 1;
-    private int Stride_Material = sizeof(float) * 8 + sizeof(int) * 0;
 
     // Non-inpector-accessible variables
 
