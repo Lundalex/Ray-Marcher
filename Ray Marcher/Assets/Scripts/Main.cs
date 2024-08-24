@@ -1,6 +1,7 @@
 using UnityEngine;
 using Unity.Mathematics;
 using System;
+using System.IO;
 
 // Import utils from Resources.cs
 using Resources;
@@ -87,6 +88,7 @@ public class Main : MonoBehaviour
     [NonSerialized] public int4 NumChunks;
     [NonSerialized] public int NumChunksAll;
     [NonSerialized] public float3 ChunkGridOffset;
+    public int[] numbers = { 1, 2, 3, 4, 5 };
 
     void Start()
     {
@@ -121,6 +123,59 @@ public class Main : MonoBehaviour
         shaderHelper.SetRMSettings(rmShader);
 
         ProgramStarted = true;
+
+        SaveArrayToFile(numbers, "numbers.json");
+        int[] loadedNumbers = LoadArrayFromFile<int>("numbers.json");
+        foreach (var num in loadedNumbers)
+        {
+            Debug.Log(num);
+        }
+    }
+
+    public void SaveArrayToFile<T>(T[] array, string fileName)
+    {
+        // Convert the array to JSON
+        string json = JsonUtility.ToJson(new Wrapper<T>(array), true);
+
+        // Get the file path
+        string path = Path.Combine(Application.persistentDataPath, fileName);
+
+        // Write the JSON to the file
+        File.WriteAllText(path, json);
+
+        Debug.Log("Array saved to " + path);
+    }
+
+    public T[] LoadArrayFromFile<T>(string fileName)
+    {
+        // Get the file path
+        string path = Path.Combine(Application.persistentDataPath, fileName);
+
+        if (File.Exists(path))
+        {
+            // Read the JSON from the file
+            string json = File.ReadAllText(path);
+
+            // Convert the JSON back to an array
+            Wrapper<T> wrapper = JsonUtility.FromJson<Wrapper<T>>(json);
+            return wrapper.array;
+        }
+        else
+        {
+            Debug.LogError("File not found: " + path);
+            return null;
+        }
+    }
+
+    [System.Serializable]
+    public class Wrapper<T>
+    {
+        public T[] array;
+
+        public Wrapper(T[] array)
+        {
+            this.array = array;
+        }
     }
     
     void LoadOBJ()
